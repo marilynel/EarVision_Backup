@@ -1,4 +1,0 @@
--need to add pandas to the yml file
--updated torchvision to 0.13, which also updated pytorch itself! (1.11 -> 1.12)
-
-so it looks like now the weights are working as intended...it downloaded some stuff when i ran it
