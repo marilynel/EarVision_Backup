@@ -19,7 +19,7 @@ from Dataset import ObjectDetectionDataset
 
 def main():
     print("EarVision 2.0")
-    datasetFull = ObjectDetectionDataset(rootDirectory = "EarDatasetLarge")
+    datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset")
 
 
     validationPercentage = 0.2
