@@ -30,7 +30,7 @@ def main():
     print("Training Set size: ", len(trainSet))
     print("Validation Set size: ", len(validationSet))
 
-    #do i need to use collate_fn here??
+    #wonder how useful changing the num_workers would be in this instance. cranking it to 4 seemed to make training take longer
     trainingDataLoader = DataLoader(trainSet, batch_size = 2, shuffle=True, collate_fn = myCollate)
     validationDataLoader = DataLoader(validationSet, batch_size = 2, shuffle=False) #setting shuffle to False so it sees the exact same batches during each validation
 
@@ -56,7 +56,7 @@ def main():
         print("Running on CPU. Device: ", device)
 
 
-    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=300).to(device)
+    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700).to(device)
     trainer = Trainer(model, trainingDataLoader, validationDataLoader, device)
     startTime = time.time()
     trainer.train()

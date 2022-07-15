@@ -55,7 +55,7 @@ class ObjectDetectionDataset(Dataset):
         imageTensor = TF.to_tensor(image)
 
 
-        print(self.imagePaths[index])
+        #print(self.imagePaths[index])
         labels = []
         boxes = []
 
@@ -66,6 +66,10 @@ class ObjectDetectionDataset(Dataset):
         #parsing XML annotations
         xmlTree = ET.parse(self.annotationPaths[index])
         xmlRoot = xmlTree.getroot()
+
+        if(len(xmlRoot.findall('object'))>600):
+            print(self.imagePaths[index])
+            print(len(xmlRoot.findall('object')))
      
        
         for obj in xmlRoot.findall('object'):
