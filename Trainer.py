@@ -4,6 +4,7 @@ import torch.nn as nn
 from tqdm import tqdm
 import numpy as np
 import datetime
+import os
 
 
 
@@ -23,6 +24,13 @@ class Trainer():
         self.trainingLoader = trainDataLoader
         self.validationLoader = validationDataLoader
         self.classNum = 4 #three fruit classes + background
+
+        startTime = datetime.datetime.now()
+        self.modelDir = startTime.strftime("%m.%d.%y_%I.%M%p")
+        
+        if not os.path.isdir("SavedModels"):
+            os.mkdir("SavedModels")
+        os.mkdir("SavedModels/"+self.modelDir)
 
 
 

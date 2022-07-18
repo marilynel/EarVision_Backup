@@ -9,6 +9,7 @@ from PIL import ImageDraw
 from PIL import ImageFont
 import xml.etree.ElementTree as ET
 import time
+import os
 from Trainer import *
 
 from Dataset import ObjectDetectionDataset
@@ -69,6 +70,9 @@ def main():
 
 
     model.eval()
+    
+    if not os.path.isdir("OutputImages"):
+        os.mkdir("OutputImages")
 
 
     for i in range(2):
