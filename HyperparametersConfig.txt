@@ -1,0 +1,27 @@
+#EarVision 2.0 Hyperparameter Configuration File
+
+#### General Hyperparameters ####
+
+#    validationPercentage: The percentage of the training set put aside for validation. '0.2' would be 20%. Default = 0.2
+#    batchSize: The size of the batches. Default = 16
+
+
+validationPercentage = 0.2
+batchSize = 16
+learningRate = 0.0005
+epochs = 30
+
+
+#### Faster R-CNN Model Specific Hyperparameters
+rpn_pre_nms_top_n_train = 3000
+rpn_post_nms_top_n_train = 3000
+rpn_pre_nms_top_n_test = 3000
+rpn_post_nms_top_n_test = 3000
+rpn_fg_iou_thresh = 0.7
+rpn_batch_size_per_image = 512
+
+min_size = 800
+max_size = 1333
+
+trainable_backbone_layers = 3
+

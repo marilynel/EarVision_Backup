@@ -14,8 +14,8 @@ class ObjectDetectionDataset(Dataset):
         print("DATASET INITIALIZATION")
 
         self.rootDirectory = rootDirectory  
-        self.imageDirectory = self.rootDirectory + "/Images"
-        self.annotationDirectory = self.rootDirectory + "/Annotations"
+        self.imageDirectory = self.rootDirectory + "/All/Images"
+        self.annotationDirectory = self.rootDirectory + "/All/Annotations"
         print("----------------------")        
         print("Dataset Root Directory: ", self.rootDirectory)
         print("Image Directory: ", self.imageDirectory)
@@ -24,9 +24,7 @@ class ObjectDetectionDataset(Dataset):
         self.imagePaths = []
         self.annotationPaths = []    
 
-        self.classes = [None, "nonfluorescent", "fluorescent"]    
-        self.width = 1920
-        self.height = 746
+        self.classes = [None, "nonfluorescent",  "fluorescent"]    
 
         
         for imgIndex, file in enumerate(sorted(os.listdir(self.imageDirectory))):  #looping through files in directories
@@ -50,8 +48,8 @@ class ObjectDetectionDataset(Dataset):
         #print("Getting item: ", self.samplePaths[index],self.maskPaths[index])
         #consider changing something here to suppres PIL warning re: RGBA
         image = Image.open(self.imagePaths[index]).convert('RGB') #bringing sample in as RGB
-        imgWidth, imgHeight = image.size
-        image = image.resize((self.width, self.height))
+        #imgWidth, imgHeight = image.size
+
         imageTensor = TF.to_tensor(image)
 
 
@@ -67,30 +65,22 @@ class ObjectDetectionDataset(Dataset):
         xmlTree = ET.parse(self.annotationPaths[index])
         xmlRoot = xmlTree.getroot()
 
+        '''
         if(len(xmlRoot.findall('object'))>600):
+            print("SO MANY Kernels")
             print(self.imagePaths[index])
             print(len(xmlRoot.findall('object')))
+        '''
      
        
         for obj in xmlRoot.findall('object'):
 
+            xmin = int(float(obj.find('bndbox').find('xmin').text))
+            xmax = int(float(obj.find('bndbox').find('xmax').text))
 
-
-            xmin = int(obj.find('bndbox').find('xmin').text)
-            xmax = int(obj.find('bndbox').find('xmax').text)
-
-            ymin = int(obj.find('bndbox').find('ymin').text)
-            ymax = int(obj.find('bndbox').find('ymax').text)
+            ymin = int(float(obj.find('bndbox').find('ymin').text))
+            ymax = int(float(obj.find('bndbox').find('ymax').text))
             
-            #print(xmin, ymin, xmax, ymax)
-            
-
-            #xmin = (xmin/imgWidth)*self.width
-            #xmax = (xmax/imgWidth)*self.width
-            #ymin = (ymin/imgHeight)*self.height
-            #ymax = (ymax/imgHeight)*self.height
-
-
             #print(xmin, ymin, xmax, ymax)
 
             if(not (xmin==xmax or ymin==ymax)):
