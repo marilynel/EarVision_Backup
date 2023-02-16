@@ -11,6 +11,7 @@ import matplotlib.pyplot as plt
 import xml.etree.ElementTree as ET
 import time
 import os
+from copy import deepcopy
 import numpy as np
 from Trainer import *
 
@@ -18,14 +19,13 @@ from Dataset import ObjectDetectionDataset
 from Utils import *
 
 
-#super helpful: https://pytorch.org/tutorials/intermediate/torchvision_tutorial.html
 
 def main(hyperparameterInput = {}, searchResultDir = ""):
     print("EarVision 2.0 \n")
 
     hyperparameters = hyperparameterInput
 
-    #Default hyperparameter values are all coded here for safe keeping. This way training should still proceed even if the parameter config .txt file is missing.
+    #Reasonable default hyperparameter values are all coded here for safe keeping. This way training should still proceed even if the parameter config .txt file is missing.
     defaultHyperparams = {
         "validationPercentage" : 0.2,
         "batchSize" : 16,
@@ -55,8 +55,10 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
     datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset")
 
     validationSize = math.floor(len(datasetFull)*hyperparameters["validationPercentage"])
-    trainSet, validationSet = torch.utils.data.random_split(datasetFull,[len(datasetFull)-validationSize, validationSize], generator=torch.Generator().manual_seed(42))
+    trainSet, validationSet = torch.utils.data.random_split(datasetFull,[len(datasetFull)-validationSize, validationSize], generator=torch.Generator().manual_seed(42)) #seed????
 
+    trainSet.dataset = deepcopy(datasetFull)
+    trainSet.dataset.isTrainingSet = True
 
     print("Training Set size: ", len(trainSet))
     print("Validation Set size: ", len(validationSet))
@@ -67,27 +69,13 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
 
         
     #Some code to output examples from validation set.
-    if not os.path.isdir("OutputImages"):
-        os.mkdir("OutputImages")
+    os.makedirs("OutputImages", exist_ok=True)
 
     for i in range(2):
         validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
         outputAnnotatedImgCV(validateImgEx, validateAnnotationsEx, "datasetValidationExample_"+str(i).zfill(3) + ".png")
- 
-    print("----------------------")
-    print("FINDING GPU")
-    print("----------------------")
-    print("Currently running CUDA Version: ", torch.version.cuda)
-    #pointing to our GPU if available
-    print("Device Count: ", torch.cuda.device_count())
 
-    if torch.cuda.is_available():
-        device = torch.device("cuda:0")
-        print("Running on GPU. Device: ", device)
-    else:
-        device = torch.device("cpu")
-        print("Running on CPU. Device: ", device)
-
+    device = findGPU()
 
     #try changing?  trainable_backbone_layers=3, box_score_thresh = 0.03, box_nms_thresh=0.4, 
     model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 

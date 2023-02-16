@@ -7,6 +7,8 @@ import datetime
 import os
 from Utils import *
 
+from torchmetrics.detection.mean_ap import MeanAveragePrecision
+
 
 #This Trainer class is what actually handles the training loop, given a model and the dataset
 
@@ -29,7 +31,7 @@ class Trainer():
         self.modelDir = saveDirectory
 
 
-        self.trainingLog = open(self.modelDir + "/TrainingLog.txt", "w+")
+        self.trainingLog = open(self.modelDir + "/TrainingLog.tsv", "w+")
         self.trainingLog.write("Epoch"+"\t"+"InSampleLoss"+"\t" + "OutSampleLoss" + "\t")
         #self.trainingLog.write("InSampleError" + "\t" + "OutSampleError" + "\n")
         self.trainingLog.write("OutFluorKernelDiff" + "\t" + "OutFluorError" + "\t" + 
@@ -49,8 +51,12 @@ class Trainer():
     def train(self):
 
         torch.set_grad_enabled(True) #enable the gradient
-
         epochs = self.hyperparameters["epochs"]
+
+        trainingMAP = MeanAveragePrecision()
+        #validationMAP = MeanAveragePrecision(class_metrics = True)
+        validationMAP = MeanAveragePrecision()
+
         for e in range(epochs):
             print("------------------")
             print("COMMENCING EPOCH: ", str(e+1)+"/"+str(epochs) )
@@ -89,7 +95,14 @@ class Trainer():
 
                 self.network.eval()
                 with torch.no_grad():
-                    finalPredictions = self.network(images)
+                    #the reason we run this through a second time just to get the outputs is due to a PyTorch F-CNN implementation quirk -- needs to be in eval() mode to get actual outputs.
+                    finalPredictions = self.network(images) 
+
+                    #print("Predictions: ", finalPredictions[0]['boxes'])
+                    #print("Targets: ", annotations[0]['boxes'])
+                    
+                    #trainingMAP.update(finalPredictions, annotations)
+
                     for i, p in enumerate(finalPredictions):
             
                         predictedFluorCnt = p['labels'].tolist().count(2)
@@ -115,12 +128,19 @@ class Trainer():
                         totalNonFluorErrorTr += nonFluorPercentageDiff
                         totalTotalErrorTr += totalPercentageDiff
 
+
             avgFluorErrorTr = totalFluorErrorTr /  (len(self.trainingLoader) * self.trainingLoader.batch_size)
             avgNonFluorErrorTr = totalNonFluorErrorTr / (len(self.trainingLoader) * self.trainingLoader.batch_size)
             avgTotalErrorTr = totalTotalErrorTr / (len(self.trainingLoader) * self.trainingLoader.batch_size)
 
             avgTrainingLoss = (trainingLossTotal / len(self.trainingLoader))
+
+            #print("computing tMAP....")
+            #tMAP = trainingMAP.compute()
+            #trainingMAP.reset()
             print("Training loss:", avgTrainingLoss )
+          
+            #print("Traning mAP: ", tMAP['map'])
             print("Training Errors: ")
             print("-Avg Fluor Error: ", avgFluorErrorTr)
             print("-Avg NonFluor Error:", avgNonFluorErrorTr)
@@ -146,6 +166,7 @@ class Trainer():
                 totalTransmissionError = 0
 
                 validationLossTotal = 0
+
 
                 for batch in tqdm(self.validationLoader):
                     images, annotations = batch
@@ -175,6 +196,11 @@ class Trainer():
 
                     #do we need NMS???
                     finalPredictions = predictions
+                    
+                    #print("p", finalPredictions[0]['boxes'], "a:", annotations[0]['boxes'])
+
+                    #validationMAP.update(finalPredictions, annotations)
+
 
                     for i, p in enumerate(finalPredictions):
                         
@@ -227,6 +253,10 @@ class Trainer():
             avgTransmissionError = totalTransmissionError / earImageCount
 
             avgValidationLoss = validationLossTotal /  (len(self.validationLoader) )  
+
+            #valMAP = validationMAP.compute()
+            #validationMAP.reset()
+            #print("Validation mAP: " , valMAP)
 
             print("Validation Loss: " , avgValidationLoss)
             print("Validation Errors: ")

@@ -2,14 +2,27 @@ import os
 import torch
 from torch.utils.data import Dataset
 import torchvision.transforms.functional as TF
+from torch.utils.data import DataLoader
+import torchvision
+import torchvision.transforms as T
+import torchvision.transforms.functional as TF
+import torchvision.models.detection as objDet
+
 from PIL import Image
 import numpy as np
 import xml.etree.ElementTree as ET
 
+import math
+import matplotlib.pyplot as plt
+import xml.etree.ElementTree as ET
+
+import numpy as np
+from Utils import *
+
 import albumentations as A
+import cv2
 
-
-class ObjectDetectionDataset(Dataset):
+class SandboxDataset(Dataset):
 
     def __init__(self, rootDirectory):
         print("\n----------------------")
@@ -39,8 +52,10 @@ class ObjectDetectionDataset(Dataset):
                 except Exception as e:
                     print(str(e))
                     pass
-
+        
         self.isTrainingSet = False
+
+
 
     def __len__(self):
         return len(self.imagePaths)
@@ -52,62 +67,35 @@ class ObjectDetectionDataset(Dataset):
         image = Image.open(self.imagePaths[index]).convert('RGB') #bringing sample in as RGB
         #imgWidth, imgHeight = image.size
 
-        imageTensor = TF.to_tensor(image)
-
+        numpyIm = np.asarray(image)
+        #imageTensor = TF.to_tensor(image)
 
         #print(self.imagePaths[index])
         labels = []
         boxes = []
 
-
-        #very helpful notebook for fruit dataset:
-        #https://www.kaggle.com/code/yerramvarun/fine-tuning-faster-rcnn-using-pytorch/notebook
-
         #parsing XML annotations
         xmlTree = ET.parse(self.annotationPaths[index])
         xmlRoot = xmlTree.getroot()
-
-        '''
-        if(len(xmlRoot.findall('object'))>600):
-            print("SO MANY Kernels")
-            print(self.imagePaths[index])
-            print(len(xmlRoot.findall('object')))
-        '''
-     
        
         for obj in xmlRoot.findall('object'):
-
             xmin = int(float(obj.find('bndbox').find('xmin').text))
             xmax = int(float(obj.find('bndbox').find('xmax').text))
 
             ymin = int(float(obj.find('bndbox').find('ymin').text))
             ymax = int(float(obj.find('bndbox').find('ymax').text))
-            
-
-
-            #exclude spurious boxes with 0 area
+            #print(xmin, ymin, xmax, ymax)
             if(not (xmin==xmax or ymin==ymax)):
-                #if box is labeled ambiguous, add fluorescent and nonfluorescent box
-                if(obj.find('name').text=='ambiguous'):
-                    labels.append(1)
-                    boxes.append([xmin, ymin, xmax, ymax])     
-                    labels.append(2)
-                    boxes.append([xmin, ymin, xmax, ymax])               
-                else:
-                    labels.append(self.classes.index(obj.find('name').text))
-                    boxes.append([xmin, ymin, xmax, ymax])
+                #exclude spurious boxes with 0 area
+                labels.append(self.classes.index(obj.find('name').text))
+                boxes.append([xmin, ymin, xmax, ymax])
 
-        
-        if(self.isTrainingSet):
-            transform = A.Compose([
-                A.HorizontalFlip(p=0.5),
-                A.Blur(p=0.0)
+
+        transform = A.Compose([
+            A.HorizontalFlip(p=0.5),
+            A.Blur(p=0.0)
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['myLabels']))
 
-        else:
-            transform = A.Compose([A.Blur(p=0.0)], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['myLabels']))
-            
-        numpyIm = np.asarray(image)
         transformed = transform(image=numpyIm, bboxes=boxes, myLabels=labels)
 
         transformedImage = transformed['image']
@@ -122,5 +110,31 @@ class ObjectDetectionDataset(Dataset):
 
         imageTensor = TF.to_tensor(transformedImage)
 
-
         return imageTensor, annotations
+
+
+def myCollate(batch):
+    return tuple(zip(*batch))
+
+
+def runSandbox():
+    sandboxDir = "./LoaderSandbox/"
+
+    datasetFull = SandboxDataset(rootDirectory = "EarDataset")
+
+    #trainingDataLoader = DataLoader(datasetFull, batch_size = 16, shuffle=True, collate_fn = myCollate)
+
+
+    for i in range(5):
+        exampleItem1 = datasetFull.__getitem__(i)
+        exampleItem2 = datasetFull.__getitem__(i)
+        exampleItem3 = datasetFull.__getitem__(i)
+        exampleItem4 = datasetFull.__getitem__(i)
+
+        outputAnnotatedImgCV(exampleItem1[0], exampleItem1[1], sandboxDir + "example_"+ str(i).zfill(2)+ "_p1.png")
+        outputAnnotatedImgCV(exampleItem2[0], exampleItem2[1], sandboxDir + "example_"+ str(i).zfill(2)+ "_p2.png")  
+        outputAnnotatedImgCV(exampleItem3[0], exampleItem3[1], sandboxDir + "example_"+ str(i).zfill(2)+ "_p3.png")  
+        outputAnnotatedImgCV(exampleItem4[0], exampleItem4[1], sandboxDir + "example_"+ str(i).zfill(2)+ "_p4.png")  
+
+if __name__ == "__main__":
+    runSandbox()

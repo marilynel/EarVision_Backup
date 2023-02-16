@@ -6,6 +6,7 @@ from PIL import Image
 import os
 import numpy as np
 import xml.etree.ElementTree as ET
+import torch
 
 def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = None):
     '''calculates count metrics for a single example'''
@@ -34,6 +35,7 @@ def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = 
         fluorPercentageDiff = predFluor   #think this over.... is this accurate??? not really.
 
     fluorKernelDiff = predFluor - actualFluor
+    fluorKernelABSDiff = abs(predFluor - actualFluor)
 
             
     if(actualNonFluor != 0):
@@ -55,10 +57,11 @@ def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = 
 
     #print("predictedTransmission: ", predictedTransmission, "   actualTransmission: ", actualTransmission)
     transmissionDiff = predictedTransmission - actualTransmission
+
     #print("transmission Diff: ", transmissionDiff)
 
     #what shall we return... 
-    metricList = [fluorKernelDiff, fluorPercentageDiff, nonFluorKernelDiff, nonFluorPercentageDiff,  totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff]
+    metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorPercentageDiff,  totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff]
     return metricList
 
 
@@ -159,7 +162,7 @@ def findAmbiguousCalls(imageTensor, annotations, name):
     return ambiguousCount
 
 
-def outputAnnotatedImgCV(image, annotations, name="OutputImages/outputImg.png", tensor=True):
+def outputAnnotatedImgCV(image, annotations, name="OutputImages/outputImg.png", bbox=False, tensor=True):
     #function to output visualized annotations on ear image using OpenCV instead of PIL to do the box drawing. 
     
     if(tensor):
@@ -200,8 +203,10 @@ def outputAnnotatedImgCV(image, annotations, name="OutputImages/outputImg.png", 
         centroidX = round((x1+x2)/2)
         centroidY = round((y1+y2)/2)
 
-        #cv2.rectangle(img, rect[0], rect[1], classColors[label], 4)
-        cv2.circle(img, (centroidX, centroidY), 8, classColors[label], -1)
+        if(bbox==True):
+            cv2.rectangle(img, rect[0], rect[1], classColors[label], 4)
+        else:
+            cv2.circle(img, (centroidX, centroidY), 8, classColors[label], -1)
 
     cv2.imwrite(name, img)
 
@@ -286,9 +291,8 @@ def outputPredictionAsXML(prediction, outFileName):
     outFile.close()
 
 
-
-
 def convertPVOC(annotationFile, imageSize):
+    #converts Pascal VOC file to JSON format compatible with Label Studio
 
 
     width = imageSize[0]
@@ -305,7 +309,7 @@ def convertPVOC(annotationFile, imageSize):
             ymin = int(float(obj.find('bndbox').find('ymin').text))
             ymax = int(float(obj.find('bndbox').find('ymax').text))
 
-            x = xmin  #does LS want top left corner pixel, or center pixel??
+            x = xmin  
             y = ymin
 
             boxW = xmax - xmin
@@ -315,7 +319,6 @@ def convertPVOC(annotationFile, imageSize):
 
             boxInfo = [x,y,boxW,boxH, label]
             boxes.append(boxInfo)
-
 
 
     outputJson = open(annotationFile.split(".")[0]+"_LS.json", "w")
@@ -358,3 +361,27 @@ def convertPVOC(annotationFile, imageSize):
     outputJson.write("}]\n")
     outputJson.write("}")
     outputJson.close()
+
+
+def stripPrecedingCharsLS(directory):
+    '''strips the preceding characters added to images and annotation files when exporting from labelstudio. Run on a directory'''
+    for file in os.listdir(directory):
+        strippedName = file[9:]
+        os.rename(directory+"/"+file, directory+"/"+strippedName)
+
+def findGPU():
+    print("----------------------")
+    print("FINDING GPU")
+    print("----------------------")
+    print("Currently running CUDA Version: ", torch.version.cuda)
+    #pointing to our GPU if available
+    print("Device Count: ", torch.cuda.device_count())
+
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        print("Running on GPU. Device: ", device)
+    else:
+        device = torch.device("cpu")
+        print("Running on CPU. Device: ", device)
+
+    return device

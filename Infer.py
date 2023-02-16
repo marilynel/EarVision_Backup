@@ -13,6 +13,7 @@ import datetime
 from Train import outputAnnotatedImgCV, loadHyperparamFile
 from Utils import *
 
+
 def Infer(dirPath = os.getcwd()):
     print("Running EarVision 2.0 Inference")
 
@@ -31,6 +32,9 @@ def Infer(dirPath = os.getcwd()):
 
     modelDir = "08.18.22_07.13PM"
     epochStr = "021"
+
+    #modelDir = "02.10.23_07.04PM"
+    #epochStr = "028"
 
     
     print("Loading Saved Model: ", modelDir,  "    Epoch: ", epochStr)
@@ -118,7 +122,6 @@ def Infer(dirPath = os.getcwd()):
 
         except:
             xmlAvail = False
-
 
 
         if(xmlAvail):
@@ -228,4 +231,4 @@ def Infer(dirPath = os.getcwd()):
 
 
 if __name__ == "__main__":
-    Infer("Inference/H_trial/20221024")
+    Infer("Inference/XML_OutTest")
