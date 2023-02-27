@@ -31,12 +31,21 @@ class Trainer():
         self.modelDir = saveDirectory
 
 
-        self.trainingLog = open(self.modelDir + "/TrainingLog.tsv", "w+")
-        self.trainingLog.write("Epoch"+"\t"+"InSampleLoss"+"\t" + "OutSampleLoss" + "\t")
+        self.trainingLog = open(self.modelDir + "/TrainingLog.csv", "w+")
+        self.trainingLog.write("Epoch"+","+"InSampleLoss"+"," + "OutSampleLoss" + ",")
         #self.trainingLog.write("InSampleError" + "\t" + "OutSampleError" + "\n")
-        self.trainingLog.write("OutFluorKernelDiff" + "\t" + "OutFluorError" + "\t" + 
+        '''
+        self.trainingLog.write("OutFluorKernelDiff" + "\t" + "OutFluorError" + "," + 
         "OutNonFluorKernelDiff"+ "\t" "OutNonFluorError"+ "\t" +
         "OutTotalKernelDiff" + "\t" "OutTotalError" + "\t" + "OutTransmissionDiff" + "\t" + "OutTransmissionError" "\n")
+        '''
+        # TODO: reorder this so ins and outs are together?
+        self.trainingLog.write("OutFluorKernelDiff" + "," + "OutFluorABSDiff" + "," + 
+        "OutNonFluorKernelDiff"+ "," "OutNonFluorKernelABSDiff"+ "," +
+        "OutTotalKernelDiff" + "," "OutTotalKernelABSDiff" + "," + "OutTransmissionDiff" + "," + "OutTransmissionABSDiff" + "," +
+        "InFluorKernelDiff" + "," + "InFluorABSDiff" + "," + 
+        "InNonFluorKernelDiff"+ "," "InNonFluorKernelABSDiff"+ "," +
+        "InTotalKernelDiff" + "," "InTotalKernelABSDiff" + "," + "InTransmissionDiff" + "," + "InTransmissionABSDiff" + "\n")
 
 
     def forwardPass(self, images, annotations, train=False, trackMetrics = True):
@@ -47,6 +56,27 @@ class Trainer():
         modelOutput = self.network(images, annotations)
         return modelOutput
 
+    ### NEW ###
+    def print_metrics(self, avgFluorKernelMiscount, avgFluorABSDiff, avgNonFluorKernelMiscount, avgNonFluorABSDiff, avgTotalKernelMiscount, avgTotalABSDiff, avgTransmissionDiff, avgTransmissionABSDiff):
+        print("-Avg Fluor Kernel Miscount: ", avgFluorKernelMiscount)
+        #print("-Avg Fluor Error: ", avgFluorError)
+        print("-Avg Fluor Kernel Miscount (Absolute Value): ", avgFluorABSDiff)
+
+        print("-Avg NonFluor Kernel Miscount: ", avgNonFluorKernelMiscount)
+        #print("-Avg NonFluor Error:", avgNonFluorError)
+        print("-Avg NonFluor Kernal Miscount (Absolute Value):", avgNonFluorABSDiff)
+
+        print("-Avg Total Kernel Miscount: ",  avgTotalKernelMiscount)
+        #print("-Avg Total Error: ", avgTotalError)
+        print("-Avg Total Kernal Miscount (Absolute Value):", avgTotalABSDiff)
+
+
+        print("-Avg Transmission Diff: ", avgTransmissionDiff)
+        #print("-Avg Transmission Error: ", avgTransmissionError)
+        print("-Avg Transmission Diff (Absolute Value):", avgTransmissionABSDiff)
+
+        print('----')
+    ### END NEW ###
 
     def train(self):
 
@@ -62,10 +92,18 @@ class Trainer():
             print("COMMENCING EPOCH: ", str(e+1)+"/"+str(epochs) )
             print("------------------")
 
-            totalFluorErrorTr = 0
-            totalNonFluorErrorTr = 0
-            totalTotalErrorTr = 0
             trainingLossTotal = 0
+            inTotalFluorKernelDiff = 0
+
+            inTotalNonFluorKernelDiff = 0
+            inTotalTotalKernelDiff = 0
+
+            inTotalTransmissionDiff = 0
+            inTotalFluorKernelABSDiff = 0
+            inTotalNonFluorKernelABSDiff = 0
+            inTotalTotalABSDiff = 0
+            inTotalTransmissionABSDiff = 0
+
 
             for batch in tqdm(self.trainingLoader):
                 self.network.train()
@@ -104,34 +142,58 @@ class Trainer():
                     #trainingMAP.update(finalPredictions, annotations)
 
                     for i, p in enumerate(finalPredictions):
-            
                         predictedFluorCnt = p['labels'].tolist().count(2)
                         predictedNonFluorCnt = p['labels'].tolist().count(1)
                         actualFluorCnt = annotations[i]['labels'].tolist().count(2)
                         actualNonFluorCnt = annotations[i]['labels'].tolist().count(1)
 
                         countMetrics = calculateCountMetrics([ predictedFluorCnt, predictedNonFluorCnt], [actualFluorCnt, actualNonFluorCnt])
-                        
+                        # return val of calculateCountMetrics
+                        # metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, totalKernelABSDiff, transmissionDiff, transmissionABSDiff]
+
                         fluorKernelDiff = countMetrics[0]
-                        fluorPercentageDiff = countMetrics[1]
+                        fluorKernelABSDiff = countMetrics[1]
 
                         nonFluorKernelDiff= countMetrics[2]
-                        nonFluorPercentageDiff = countMetrics[3]
+                        nonFluorKernelABSDiff = countMetrics[3]
 
                         totalKernelDiff = countMetrics[4]
-                        totalPercentageDiff = countMetrics[5]
+                        totalKernelABSDiff = countMetrics[5]
 
                         transmissionDiff = countMetrics[6]
-                        transmissionPercentageDiff = countMetrics[7]
+                        transmissionABSDiff = countMetrics[7]
 
-                        totalFluorErrorTr += fluorPercentageDiff 
-                        totalNonFluorErrorTr += nonFluorPercentageDiff
-                        totalTotalErrorTr += totalPercentageDiff
+                        inTotalFluorKernelDiff += fluorKernelDiff
+                        inTotalFluorKernelABSDiff += fluorKernelABSDiff 
+
+                        inTotalNonFluorKernelDiff += nonFluorKernelDiff
+                        inTotalNonFluorKernelABSDiff += nonFluorKernelABSDiff
+
+                        inTotalTotalKernelDiff += totalKernelDiff
+                        inTotalTotalABSDiff += totalKernelABSDiff
+
+                        inTotalTransmissionDiff += transmissionDiff
+                        inTotalTransmissionABSDiff += transmissionABSDiff
 
 
-            avgFluorErrorTr = totalFluorErrorTr /  (len(self.trainingLoader) * self.trainingLoader.batch_size)
-            avgNonFluorErrorTr = totalNonFluorErrorTr / (len(self.trainingLoader) * self.trainingLoader.batch_size)
-            avgTotalErrorTr = totalTotalErrorTr / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            #avgFluorErrorTr = totalFluorErrorTr /  (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            #avgNonFluorErrorTr = totalNonFluorErrorTr / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            #avgTotalErrorTr = totalTotalErrorTr / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+
+            ### NEW ###          
+            inAvgFluorKernelMiscount = inTotalFluorKernelDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            inAvgFluorABSDiff = inTotalFluorKernelABSDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+
+            inAvgNonFluorKernelMiscount = inTotalNonFluorKernelDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            inAvgNonFluorABSDiff = inTotalNonFluorKernelABSDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+
+            inAvgTotalKernelMiscount = inTotalTotalKernelDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            inAvgTotalABSDiff = inTotalTotalABSDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+
+            inAvgTransmissionDiff = inTotalTransmissionDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            inAvgTransmissionABSDiff = inTotalTransmissionABSDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
+            ### END NEW ###
+
 
             avgTrainingLoss = (trainingLossTotal / len(self.trainingLoader))
 
@@ -142,9 +204,14 @@ class Trainer():
           
             #print("Traning mAP: ", tMAP['map'])
             print("Training Errors: ")
-            print("-Avg Fluor Error: ", avgFluorErrorTr)
-            print("-Avg NonFluor Error:", avgNonFluorErrorTr)
-            print("-Avg Total Error: ", avgTotalErrorTr)
+
+            ### NEW ###            
+            self.print_metrics(inAvgFluorKernelMiscount, inAvgFluorABSDiff, inAvgNonFluorKernelMiscount, inAvgNonFluorABSDiff, inAvgTotalKernelMiscount, inAvgTotalABSDiff, inAvgTransmissionDiff, inAvgTransmissionABSDiff)
+
+
+            #print("-Avg Fluor Error: ", avgFluorErrorTr)
+            #print("-Avg NonFluor Error:", avgNonFluorErrorTr)
+            #print("-Avg Total Error: ", avgTotalErrorTr)
 
 
             print("VALIDATING")
@@ -155,18 +222,20 @@ class Trainer():
             with torch.no_grad():
                 
                 totalFluorKernelDiff = 0
-                totalFluorError = 0
 
                 totalNonFluorKernelDiff = 0
-                totalNonFluorError = 0
                 totalTotalKernelDiff = 0
-                totalTotalError = 0
 
                 totalTransmissionDiff = 0
-                totalTransmissionError = 0
 
                 validationLossTotal = 0
 
+
+                ### NEW ###
+                totalFluorKernelABSDiff = 0
+                totalNonFluorKernelABSDiff = 0
+                totalTotalABSDiff = 0
+                totalTransmissionABSDiff = 0
 
                 for batch in tqdm(self.validationLoader):
                     images, annotations = batch
@@ -203,7 +272,7 @@ class Trainer():
 
 
                     for i, p in enumerate(finalPredictions):
-                        
+                        # repeated from above, can this be combined with previous codE?
                         predictedFluorCnt = p['labels'].tolist().count(2)
                         predictedNonFluorCnt = p['labels'].tolist().count(1)
 
@@ -213,44 +282,42 @@ class Trainer():
                         countMetrics = calculateCountMetrics([ predictedFluorCnt, predictedNonFluorCnt], [actualFluorCnt, actualNonFluorCnt])
                         
                         fluorKernelDiff = countMetrics[0]
-                        fluorPercentageDiff = countMetrics[1]
+                        fluorKernelABSDiff = countMetrics[1]
 
                         nonFluorKernelDiff= countMetrics[2]
-                        nonFluorPercentageDiff = countMetrics[3]
+                        nonFluorKernelABSDiff = countMetrics[3]
 
                         totalKernelDiff = countMetrics[4]
-                        totalPercentageDiff = countMetrics[5]
+                        totalKernelABSDiff = countMetrics[5]
 
                         transmissionDiff = countMetrics[6]
-                        transmissionPercentageDiff = countMetrics[7]
+                        transmissionABSDiff = countMetrics[7]
 
-
-                        #continue summing the metrics:
                         totalFluorKernelDiff += fluorKernelDiff
-                        totalFluorError += fluorPercentageDiff 
+                        totalFluorKernelABSDiff += fluorKernelABSDiff
 
                         totalNonFluorKernelDiff += nonFluorKernelDiff
-                        totalNonFluorError += nonFluorPercentageDiff
+                        totalNonFluorKernelABSDiff += nonFluorKernelABSDiff
 
                         totalTotalKernelDiff += totalKernelDiff
-                        totalTotalError += totalPercentageDiff
+                        totalTotalABSDiff += totalKernelABSDiff
 
                         totalTransmissionDiff += transmissionDiff
-                        totalTransmissionError += transmissionPercentageDiff
+                        totalTransmissionABSDiff += transmissionABSDiff
 
             earImageCount =( len(self.validationLoader) * self.validationLoader.batch_size)
 
             avgFluorKernelMiscount = totalFluorKernelDiff / earImageCount
-            avgFluorError = totalFluorError /  earImageCount
+            avgFluorABSDiff = totalFluorKernelABSDiff / earImageCount
 
             avgNonFluorKernelMiscount = totalNonFluorKernelDiff / earImageCount
-            avgNonFluorError = totalNonFluorError / earImageCount
+            avgNonFluorABSDiff = totalNonFluorKernelABSDiff / earImageCount
 
             avgTotalKernelMiscount = totalTotalKernelDiff / earImageCount
-            avgTotalError = totalTotalError / earImageCount
+            avgTotalABSDiff = totalTotalABSDiff / earImageCount
 
             avgTransmissionDiff = totalTransmissionDiff / earImageCount
-            avgTransmissionError = totalTransmissionError / earImageCount
+            avgTransmissionABSDiff = totalTransmissionABSDiff / earImageCount
 
             avgValidationLoss = validationLossTotal /  (len(self.validationLoader) )  
 
@@ -260,30 +327,26 @@ class Trainer():
 
             print("Validation Loss: " , avgValidationLoss)
             print("Validation Errors: ")
-            print("-Avg Fluor Kernel Miscount: ", avgFluorKernelMiscount)
-            print("-Avg Fluor Error: ", avgFluorError)
+            
+            ### NEW ###
+            self.print_metrics(avgFluorKernelMiscount, avgFluorABSDiff, avgNonFluorKernelMiscount, avgNonFluorABSDiff, avgTotalKernelMiscount, avgTotalABSDiff, avgTransmissionDiff, avgTransmissionABSDiff)
 
-            print("-Avg NonFluor Kernel Miscount: ", avgNonFluorKernelMiscount)
-            print("-Avg NonFluor Error:", avgNonFluorError)
-
-            print("-Avg Total Kernel Miscount: ",  avgTotalKernelMiscount)
-            print("-Avg Total Error: ", avgTotalError)
-
-            print("-Avg Transmission Diff: ", avgTransmissionDiff)
-            print("-Avg Transmission Error: ", avgTransmissionError)
-
-            print('----')
                 
-            self.trainingLog.writelines([str(e+1)+"\t" , str(avgTrainingLoss.item()) +"\t", str(avgValidationLoss.item())+"\t"])
+            self.trainingLog.writelines([str(e+1)+"," , str(avgTrainingLoss.item()) +",", str(avgValidationLoss.item())+","])
             '''
             for i in range(5):
                 self.trainingLog.writelines([str(inSampleMetrics[i])+"\t", str(outSampleMetrics[i])+"\t"])
             '''
-            self.trainingLog.writelines([str(avgFluorKernelMiscount)+"\t", str(avgFluorError)+"\t", 
-            str(avgNonFluorKernelMiscount)+"\t", str(avgNonFluorError)+"\t",
-            str(avgTotalKernelMiscount) +"\t", str(avgTotalError) +"\t", str(avgTransmissionDiff) +"\t", str(avgTransmissionError)])
-            self.trainingLog.writelines(["\n"])
+            ### NEW ###
+            self.trainingLog.writelines([str(avgFluorKernelMiscount)+",", str(avgFluorABSDiff)+",", 
+            str(avgNonFluorKernelMiscount)+",", str(avgNonFluorABSDiff)+",",
+            str(avgTotalKernelMiscount) +",", str(avgTotalABSDiff) +",", str(avgTransmissionDiff) +",", str(avgTransmissionABSDiff) + ",",
+            str(inAvgFluorKernelMiscount)+",", str(inAvgFluorABSDiff)+",", 
+            str(inAvgNonFluorKernelMiscount)+",", str(inAvgNonFluorABSDiff)+",",
+            str(inAvgTotalKernelMiscount) +",", str(inAvgTotalABSDiff) +",", str(inAvgTransmissionDiff) +",", str(inAvgTransmissionABSDiff)])
 
+            self.trainingLog.writelines(["\n"])
+            ### END NEW ###
 
             torch.save(self.network.state_dict(), self.modelDir+"/EarVisionModel_"+str(e+1).zfill(3)+".pt")
             print("Saved " + "EarVisionModel_"+str(e+1).zfill(3)+".pt")
@@ -291,3 +354,5 @@ class Trainer():
             print("\n~EPOCH "+ str(e+1) + " TRAINING COMPLETE~ \n")
 
         self.trainingLog.close()
+    
+    

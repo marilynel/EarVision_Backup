@@ -28,7 +28,6 @@ class ObjectDetectionDataset(Dataset):
 
         self.classes = [None, "nonfluorescent",  "fluorescent"]    
 
-        
         for imgIndex, file in enumerate(sorted(os.listdir(self.imageDirectory))):  #looping through files in directories
             if(file.endswith((".png", ".jpg", ".tif"))):
                 try:
@@ -98,13 +97,33 @@ class ObjectDetectionDataset(Dataset):
                     boxes.append([xmin, ymin, xmax, ymax])
 
         
+
+        
+        
         if(self.isTrainingSet):
             transform = A.Compose([
-                A.HorizontalFlip(p=0.5),
-                A.Blur(p=0.0)
+                # Flip may be vertical, horizontal, or both
+                A.Flip(p=0.5),
+                A.MedianBlur (
+                    blur_limit=(5,9),
+                    always_apply=False,
+                    p=0.2
+                ),
+                A.ColorJitter (brightness=0.2, contrast=0, saturation=0, hue=0, always_apply=False, p=0.2),
+                A.Perspective (
+                    scale=(0.05, 0.1),
+                    keep_size=True,
+                    pad_mode=0,
+                    pad_val=0,
+                    mask_pad_val=0,
+                    fit_output=False,
+                    always_apply=False,
+                    p=0.2
+                )
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['myLabels']))
 
         else:
+            # if not training set, we don't transform?
             transform = A.Compose([A.Blur(p=0.0)], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['myLabels']))
             
         numpyIm = np.asarray(image)

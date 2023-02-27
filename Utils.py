@@ -17,7 +17,8 @@ def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = 
 
     actualFluor = actualCounts[0]
     actualNonFluor = actualCounts[1]
-    if(actualTotalInclAmbig == None):
+
+    if(actualTotalInclAmbig == None):               # should always be true as currently written
         actualTotal = actualFluor + actualNonFluor
     else:
         actualTotal = actualTotalInclAmbig
@@ -35,7 +36,7 @@ def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = 
         fluorPercentageDiff = predFluor   #think this over.... is this accurate??? not really.
 
     fluorKernelDiff = predFluor - actualFluor
-    fluorKernelABSDiff = abs(predFluor - actualFluor)
+    fluorKernelABSDiff = abs(predFluor - actualFluor)                       # NEW          
 
             
     if(actualNonFluor != 0):
@@ -45,9 +46,12 @@ def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = 
         nonFluorPercentageDiff = predNonFluor  #think this over.... is this accurate??? not really.
 
     nonFluorKernelDiff = predNonFluor - actualNonFluor
+    nonFluorKernelABSDiff = abs(predNonFluor - actualNonFluor)              # NEW    
 
     totalPercentageDiff = float((abs((predTotal)-(actualTotal) ) / (actualTotal) ) * 100)
     totalKernelDiff = predTotal - actualTotal
+    totalKernelABSDiff = abs(predTotal - actualTotal)                       # NEW
+
 
     if(actualTransmission != 0):
         transmissionPercentageDiff =  float((abs((predictedTransmission)-(actualTransmission) ) / (actualTransmission) ) * 100)
@@ -57,11 +61,14 @@ def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = 
 
     #print("predictedTransmission: ", predictedTransmission, "   actualTransmission: ", actualTransmission)
     transmissionDiff = predictedTransmission - actualTransmission
-
+    transmissionABSDiff = abs(predictedTransmission - actualTransmission)   # NEW  
     #print("transmission Diff: ", transmissionDiff)
 
     #what shall we return... 
-    metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorPercentageDiff,  totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff]
+
+    metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, totalKernelABSDiff, transmissionDiff, transmissionABSDiff]
+    #metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorPercentageDiff,  totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff]
+    #              keep             keep                keep                nope                     keep             nope?                 keep              nope?
     return metricList
 
 
@@ -173,7 +180,7 @@ def outputAnnotatedImgCV(image, annotations, name="OutputImages/outputImg.png", 
     labels = annotations["labels"]
     boxes = annotations["boxes"]
 
-    classColors = [None,(255,50,195),(15, 255, 200)]
+    classColors = [None,(255,50,195),(15, 255, 200), (255,150,0)]
 
     for ind, label in enumerate(labels):
         #print(label, boxes[ind])

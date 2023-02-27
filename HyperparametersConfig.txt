@@ -6,8 +6,8 @@
 #    batchSize: The size of the batches. Default = 16
 
 
-validationPercentage = 0.2
-batchSize = 16
+validationPercentage = 0.15
+batchSize = 8
 learningRate = 0.0005
 epochs = 30
 

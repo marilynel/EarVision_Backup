@@ -43,6 +43,8 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
         "trainable_backbone_layers" : 3
     }
 
+
+
     for param in defaultHyperparams:
         if param not in hyperparameters or hyperparameters[param] =="":
             hyperparameters[param] = defaultHyperparams[param]
@@ -78,11 +80,18 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
     device = findGPU()
 
     #try changing?  trainable_backbone_layers=3, box_score_thresh = 0.03, box_nms_thresh=0.4, 
+    '''
     model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
     rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
     rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
     rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
     rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"])
+    '''
+    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
+    rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
+    rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
+    rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
+    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh = 0.3, box_score_thresh = 0.15)
     
     #awkward but unless you do this it defaults to 91 classes
     in_features = model.roi_heads.box_predictor.cls_score.in_features

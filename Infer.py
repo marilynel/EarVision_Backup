@@ -29,14 +29,22 @@ def Infer(dirPath = os.getcwd()):
         device = torch.device("cpu")
         print("Running on CPU. Device: ", device)
 
-
+    # Change if needed
     modelDir = "08.18.22_07.13PM"
     epochStr = "021"
 
     #modelDir = "02.10.23_07.04PM"
     #epochStr = "028"
 
+    #new w/o augmentations, validation = 0.2
+    #modelDir = "02.21.23_03.39PM"
+    #epochStr = "019"
     
+    #new model with augmentations
+    #modelDir = "02.24.23_03.23PM"  
+    #epochStr = "023"
+
+
     print("Loading Saved Model: ", modelDir,  "    Epoch: ", epochStr)
 
  
@@ -55,7 +63,7 @@ def Infer(dirPath = os.getcwd()):
     rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
     rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
     rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
-    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"])
+    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh = 0.3, box_score_thresh = 0.15)
     
     
     '''
@@ -103,8 +111,14 @@ def Infer(dirPath = os.getcwd()):
 
     outFile.write("EarName,TrainingSet,PredictedFluor,PredictedNonFluor,PredictedTotal,PredictedTransmission,"+
     "AmbiguousKernels,AmbiguousKernelPercentage,AverageEarScoreFluor,AverageEarScoreNonFluor,AverageEarScoreAll," +
-    "ActualFluor,ActualNonFluor,ActualTotal,ActualTransmission,"+
-    "FluorKernelDiff,FluorPercentageDiff,NonFluorKernelDiff,NonFluorPercentageDiff,TotalKernelDiff,TotalPercentageDiff,TransmissionDiff,TranmissionPercentageDiff" +"\n")
+    "ActualFluor,ActualNonFluor,ActualAmbiguous,ActualTotal,ActualTransmission,"+
+    "FluorKernelDiff,FluorKernelABSDiff,NonFluorKernelDiff,NonFluorKernelABSDiff,TotalKernelDiff,TotalKernelABSDiff,TransmissionDiff,TranmissionABSDiff" +"\n")
+
+    #original code
+    #outFile.write("EarName,TrainingSet,PredictedFluor,PredictedNonFluor,PredictedTotal,PredictedTransmission,"+
+    #"AmbiguousKernels,AmbiguousKernelPercentage,AverageEarScoreFluor,AverageEarScoreNonFluor,AverageEarScoreAll," +
+    #"ActualFluor,ActualNonFluor,ActualTotal,ActualTransmission,"+
+    #"FluorKernelDiff,FluorPercentageDiff,NonFluorKernelDiff,NonFluorPercentageDiff,TotalKernelDiff,TotalPercentageDiff,TransmissionDiff,TranmissionPercentageDiff" +"\n")
 
     for path in tqdm(imagePaths):
         #print("working on ", path)
@@ -143,14 +157,14 @@ def Infer(dirPath = os.getcwd()):
         if(xmlAvail):
             actualFluor = markerTypeCounts[0]
             actualNonFluor = markerTypeCounts[1]
+            actualAmb = markerTypeCounts[2]
 
             actualTransmission = actualFluor / (actualNonFluor+actualFluor) * 100
 
-            actualTotal = sum(markerTypeCounts)   #this would include the ambiguous kernels in the actual total
-
+            # should only include fluro and nonfluor, subtract ambiguous
+            #actualTotal = sum(markerTypeCounts)   #this would include the ambiguous kernels in the actual total
+            actualTotal = actualFluor + actualNonFluor
     
-
-        #you might as well put the input images into a batch, no? Should process faster...
 
         with torch.no_grad(): 
             prediction = model(imageTensor)[0]
@@ -175,20 +189,24 @@ def Infer(dirPath = os.getcwd()):
         predNonFluor = finalPrediction['labels'].tolist().count(1)
         predFluor = finalPrediction['labels'].tolist().count(2)  
     
-        predTotal = predFluor + predNonFluor  #currently includes ambiguous
-        predTransmission =   predFluor /  (predTotal) * 100
+
 
         ambiguousKernelCount = findAmbiguousCalls(imageTensor[0], finalPrediction, outputDirectory+"/"+ fileName.split(".")[0] + "_inference.png")
-        ambiguousKernelPercentage = round(ambiguousKernelCount/(predTotal - ambiguousKernelCount)*100, 3)     #take total counted kernels, subtract ambiguous kernel count, and use THAT as total to determine percentage
+        ambiguousKernelPercentage = round(ambiguousKernelCount/(predFluor + predNonFluor - ambiguousKernelCount)*100, 3)     #take total counted kernels, subtract ambiguous kernel count, and use THAT as total to determine percentage
 
+
+        predNonFluor -= ambiguousKernelCount
+        predFluor -= ambiguousKernelCount 
+        predTotal = predFluor + predNonFluor 
+        predTransmission =   predFluor /  (predTotal) * 100
 
         scores = finalPrediction['scores']
         labels = finalPrediction['labels']
 
-        fluorScores = [score.item() for ind,score in enumerate(scores)  if labels[ind].item()== 2 ] #update when you retrain!
+        fluorScores = [score.item() for ind,score in enumerate(scores)  if labels[ind].item()== 2 ]
         nonFluorScores =[score.item() for ind,score in enumerate(scores) if labels[ind].item()== 1 ] 
 
-
+        # Confidence in the predictions
         avgEarScoreFluor = round(np.mean(fluorScores), 3)
         avgEarScoreNonFluor = round(np.mean(nonFluorScores), 3)
         avgEarScoreAll = round(torch.mean(scores).item(), 3)
@@ -212,18 +230,30 @@ def Infer(dirPath = os.getcwd()):
 
         if(xmlAvail):
             #write to actual values to outFile
-            outFile.write(str(actualFluor)+"," + str(actualNonFluor) + "," + str(actualTotal) + ","  + str(actualTransmission) + "," )
+            outFile.write(str(actualFluor)+"," + str(actualNonFluor) + "," + str(actualAmb) + "," + str(actualTotal) + ","  + str(actualTransmission) + "," )
 
-            fluorKernelDiff, fluorPercentageDiff, nonFluorKernelDiff, nonFluorPercentageDiff, \
-            totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff = calculateCountMetrics([ predFluor, predNonFluor ], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
+            # metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, totalKernelABSDiff, transmissionDiff, transmissionABSDiff]
+
+            fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, \
+            totalKernelDiff, totalKernelABSDiff,  transmissionDiff, transmissionABSDiff = calculateCountMetrics([ predFluor, predNonFluor ], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
+            
+            # original code
+            #fluorKernelDiff, fluorPercentageDiff, nonFluorKernelDiff, nonFluorPercentageDiff, \
+            #totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff = calculateCountMetrics([ predFluor, predNonFluor ], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
             
             #write the metric comparisons between prediced and actual to outFile
 
-            outFile.write( str(fluorKernelDiff) + "," + str(fluorPercentageDiff) + "," + 
-            str(nonFluorKernelDiff) + "," + str(nonFluorPercentageDiff)+","+str(totalKernelDiff)+","+str(totalPercentageDiff)+"," +
-            str(transmissionDiff)+","+str(transmissionPercentageDiff))
+            outFile.write( str(fluorKernelDiff) + "," + str(fluorKernelABSDiff) + "," + 
+            str(nonFluorKernelDiff) + "," + str(nonFluorKernelABSDiff)+","+str(totalKernelDiff)+","+str(totalKernelABSDiff)+"," +
+            str(transmissionDiff)+","+str(transmissionABSDiff))
+
+            # oridginal code
+            #outFile.write( str(fluorKernelDiff) + "," + str(fluorPercentageDiff) + "," + 
+            #str(nonFluorKernelDiff) + "," + str(nonFluorPercentageDiff)+","+str(totalKernelDiff)+","+str(totalPercentageDiff)+"," +
+            #str(transmissionDiff)+","+str(transmissionPercentageDiff))
 
         outFile.write("\n")
+        outFile.write("Model," + modelDir + ",Epoch," + epochStr)
 
         #print(" ")
 

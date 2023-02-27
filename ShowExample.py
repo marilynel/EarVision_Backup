@@ -13,8 +13,7 @@ def outputImageAnnotations(fileName, xmlFile, outputFile):
     xmlTree = ET.parse(xmlFile)
     xmlRoot = xmlTree.getroot()
 
-    classes = [None,  "fluorescent", "nonfluorescent" ]  
-    #classes = [None, "nonfluorescent",  "fluorescent" ]  
+    classes = [None,  "nonfluorescent", "fluorescent", "ambiguous" ]   
 
     for obj in xmlRoot.findall('object'):
 
@@ -35,6 +34,6 @@ def outputImageAnnotations(fileName, xmlFile, outputFile):
     annotations["labels"] = torch.as_tensor(labels, dtype = torch.int64)
     annotations["boxes"] = torch.as_tensor(boxes, dtype = torch.float)
 
-    outputAnnotatedImgCV(fileName, annotations, outputFile, tensor=False)
+    outputAnnotatedImgCV(fileName, annotations, outputFile, tensor=False, bbox=True)
 
-outputImageAnnotations("X400x533A-8m2.png", "X400x533A-8m2.xml", "outEx.png")
+outputImageAnnotations("B2x22_inference.png", "B2x22_inference.xml", "outEx.png")

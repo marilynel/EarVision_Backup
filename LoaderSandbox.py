@@ -39,7 +39,7 @@ class SandboxDataset(Dataset):
         self.imagePaths = []
         self.annotationPaths = []    
 
-        self.classes = [None, "nonfluorescent",  "fluorescent"]    
+        self.classes = [None, "nonfluorescent",  "fluorescent", "ambiguous"]    
 
         
         for imgIndex, file in enumerate(sorted(os.listdir(self.imageDirectory))):  #looping through files in directories
