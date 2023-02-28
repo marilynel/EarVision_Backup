@@ -30,8 +30,8 @@ def Infer(dirPath = os.getcwd()):
         print("Running on CPU. Device: ", device)
 
     # Change if needed
-    modelDir = "08.18.22_07.13PM"
-    epochStr = "021"
+    #modelDir = "08.18.22_07.13PM"
+    #epochStr = "021"
 
     #modelDir = "02.10.23_07.04PM"
     #epochStr = "028"
@@ -44,6 +44,9 @@ def Infer(dirPath = os.getcwd()):
     #modelDir = "02.24.23_03.23PM"  
     #epochStr = "023"
 
+
+    modelDir = "02.27.23_02.06PM"
+    epochStr = "023"
 
     print("Loading Saved Model: ", modelDir,  "    Epoch: ", epochStr)
 
@@ -253,10 +256,10 @@ def Infer(dirPath = os.getcwd()):
             #str(transmissionDiff)+","+str(transmissionPercentageDiff))
 
         outFile.write("\n")
-        outFile.write("Model," + modelDir + ",Epoch," + epochStr)
+        
 
         #print(" ")
-
+    outFile.write("Model," + modelDir + ",Epoch," + epochStr)
     outFile.close()
 
 

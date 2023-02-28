@@ -40,7 +40,9 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
         "rpn_batch_size_per_image" : 512,
         "min_size" : 800,
         "max_size" : 1333,
-        "trainable_backbone_layers" : 3
+        "trainable_backbone_layers" : 3,
+        "box_nms_thresh" : 0.3, 
+        "box_score_thresh" : 0.15
     }
 
 

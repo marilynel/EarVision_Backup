@@ -25,3 +25,6 @@ max_size = 1333
 
 trainable_backbone_layers = 3
 
+box_nms_thresh = 0.3
+box_score_thresh = 0.15
+
