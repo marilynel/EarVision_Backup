@@ -11,6 +11,7 @@ import torch
 def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = None):
     '''calculates count metrics for a single example'''
 
+
     predFluor = predictedCounts[0]
     predNonFluor = predictedCounts[1]
     predTotal = predFluor + predNonFluor
@@ -64,13 +65,10 @@ def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = 
     transmissionABSDiff = abs(predictedTransmission - actualTransmission)   # NEW  
     #print("transmission Diff: ", transmissionDiff)
 
-    #what shall we return... 
 
-    metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, totalKernelABSDiff, transmissionDiff, transmissionABSDiff]
-    #metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorPercentageDiff,  totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff]
-    #              keep             keep                keep                nope                     keep             nope?                 keep              nope?
-    return metricList
+    #metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, totalKernelABSDiff, transmissionDiff, transmissionABSDiff]
 
+    return fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, totalKernelABSDiff, transmissionDiff, transmissionABSDiff
 
 
 
@@ -164,7 +162,9 @@ def findAmbiguousCalls(imageTensor, annotations, name):
     #cv2.imwrite(name.split(".")[0]+"_nonfluorDots.png", nonFluorCentroids)
     #cv2.imwrite(name.split(".")[0]+"_ambiguousOverlaps.png", ambiguousOverlaps)
 
-    cv2.imwrite(name.split(".")[0]+"_ambiguousSpots.png", ambiguousSpots)
+    #cv2.imwrite(name.split(".")[0]+"_ambiguousSpots.png", ambiguousSpots)
+    # above line is rewritten to account for the fact that model dates are now included in the folder names which apparently messes this up
+    cv2.imwrite(name[:-4] + "_ambiguousSpots.png", ambiguousSpots)
 
     return ambiguousCount
 
@@ -243,6 +243,11 @@ def outputPointAnnotatedImg(image, annotationsXML, name="OutputImages/outputPoin
 
                 cv2.circle(img, (xCoord, yCoord), 8, classColors[typeID-1], -1)
     cv2.imwrite(name, img)
+
+
+#def unmarkedImg(image, filename):
+#    img = cv2.imread(image, cv2.IMREAD_COLOR)
+#    cv2.imwrite(filename, image)
 
 def outputPredictionAsXML(prediction, outFileName):
 
@@ -328,7 +333,9 @@ def convertPVOC(annotationFile, imageSize):
             boxes.append(boxInfo)
 
 
-    outputJson = open(annotationFile.split(".")[0]+"_LS.json", "w")
+    #outputJson = open(annotationFile.split(".")[0]+"_LS.json", "w")
+    # above line rewritten to account for periods in folder name
+    outputJson = open(annotationFile[:-4] + "_LS.json", "w")
 
     outputJson.write("{ \n")
     outputJson.write('"data": {\n')

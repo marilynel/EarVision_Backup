@@ -96,10 +96,18 @@ class ObjectDetectionDataset(Dataset):
                     labels.append(self.classes.index(obj.find('name').text))
                     boxes.append([xmin, ymin, xmax, ymax])
 
-        
 
-        
-        
+                    '''
+                    labels = ["nonfluorescent", "nonfluorescent", "fluorescent", ... ]
+                    boxes = [
+                        [xmin0, ymin0, xmax0, ymax0],
+                        [xmin1, ymin1, xmax1, ymax1],
+                        [xmin2, ymin2, xmax2, ymax2],
+                        ...
+                    ]
+                    '''
+
+
         if(self.isTrainingSet):
             transform = A.Compose([
                 # Flip may be vertical, horizontal, or both
@@ -109,6 +117,7 @@ class ObjectDetectionDataset(Dataset):
                     always_apply=False,
                     p=0.2
                 ),
+                # augment color jitter more? change contrast/sat/hue?
                 A.ColorJitter (brightness=0.2, contrast=0, saturation=0, hue=0, always_apply=False, p=0.2),
                 A.Perspective (
                     scale=(0.05, 0.1),

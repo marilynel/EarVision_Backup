@@ -1,5 +1,6 @@
 import torch
 from torch.utils.data import DataLoader
+import torchmetrics
 import torchvision
 import torchvision.transforms.functional as TF
 import torchvision.models.detection as objDet
@@ -18,93 +19,199 @@ from Trainer import *
 from Dataset import ObjectDetectionDataset
 from Utils import *
 
+# may not need this here?
+from torchmetrics import F1Score
 
 
-def main(hyperparameterInput = {}, searchResultDir = ""):
-    print("EarVision 2.0 \n")
-
-    hyperparameters = hyperparameterInput
+def setHyperParams(hyperParameterInput):
+    hyperparameters = {}    #hyperparameterInput
 
     #Reasonable default hyperparameter values are all coded here for safe keeping. This way training should still proceed even if the parameter config .txt file is missing.
+    '''
+    Definitions:
+        NMS         Non-Maximal Suppression; function to filter out duplicates. NMS takes couples of overlapping boxes having 
+                    equal class, and if their overlap is greater than some threshold, only the one with higher probability is 
+                    kept. This procedure continues until there are no more boxes with sufficient overlap. Default val = 0.7
+
+        backbone    the network used to compute the features for the model; faster r cnn uses RPN
+
+        RPN         Region Proposal Network
+
+    '''
     defaultHyperparams = {
-        "validationPercentage" : 0.2,
-        "batchSize" : 16,
-        "learningRate" : 0.0005,
-        "epochs" : 30, 
+        "validationPercentage" : 0.2,           # 20% of training data is set aside in each epoch to be used for validation 
+        "batchSize" : 16,                       # 16 images are sent to the GPU at a time
+        "learningRate" : 0.0005,                # incremental changes in params
+        "epochs" : 30,                          # number of rounds
 
-        "rpn_pre_nms_top_n_train" : 3000,
-        "rpn_post_nms_top_n_train" : 3000,
-        "rpn_pre_nms_top_n_test" : 3000,
-        "rpn_post_nms_top_n_test" : 3000,
-        "rpn_fg_iou_thresh" : 0.7,
-        "rpn_batch_size_per_image" : 512,
-        "min_size" : 800,
-        "max_size" : 1333,
-        "trainable_backbone_layers" : 3,
-        "box_nms_thresh" : 0.3, 
-        "box_score_thresh" : 0.15
+        "rpn_pre_nms_top_n_train" : 3000,       # number of proposals to keep before applying NMS during training
+        "rpn_post_nms_top_n_train" : 3000,      # number of proposals to keep after applying NMS during training
+        "rpn_pre_nms_top_n_test" : 3000,        # number of proposals to keep before applying NMS during testing 
+        "rpn_post_nms_top_n_test" : 3000,       # number of proposals to keep after applying NMS during testing
+        "rpn_fg_iou_thresh" : 0.7,              # minimum IoU between the anchor and the GT box so that they can be considered as positive during training of the RPN.
+        "rpn_batch_size_per_image" : 512,       # number of anchors that are sampled during training of the RPN for computing the loss
+        "min_size" : 800,                       # min size of image to be rescaled before feeding it to the backbone
+        "max_size" : 1333,                      # max size of image to be rescaled before feeding it to the backbone
+        "trainable_backbone_layers" : 3,        # number of trainable (not frozen) layers starting from final block, values between 0 - 5, with 6 ==  all backbone layers are trainable. default == 3
+        "box_nms_thresh" : 0.3,                 # NMS threshold for the prediction head. Used during inference
+        "box_score_thresh" : 0.2                # during inference, only return proposals with a classification score greater than box_score_thresh
     }
-
-
 
     for param in defaultHyperparams:
         if param not in hyperparameters or hyperparameters[param] =="":
             hyperparameters[param] = defaultHyperparams[param]
 
-
     print("Using Hyperparameters: \n")
     for p in hyperparameters:
         print(str(p) + " : " + str(hyperparameters[p]))
 
-    datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset")
+    return hyperparameters
 
+
+def setTrainingAndValidationSets(datasetFull, hyperparameters):
+    # TODO: where is testing set? if it's altogether missing, is it needed for this model? google it when you get in Mel!
     validationSize = math.floor(len(datasetFull)*hyperparameters["validationPercentage"])
+    # Training and validation sets are split here. Could cross validation be done here? 
     trainSet, validationSet = torch.utils.data.random_split(datasetFull,[len(datasetFull)-validationSize, validationSize], generator=torch.Generator().manual_seed(42)) #seed????
 
+    # is this line redefining trainSet? is the trainset the same as the original dataset here?
     trainSet.dataset = deepcopy(datasetFull)
     trainSet.dataset.isTrainingSet = True
 
     print("Training Set size: ", len(trainSet))
     print("Validation Set size: ", len(validationSet))
 
+    return trainSet, validationSet
+
+
+# Is this even necessary??????
+def createExampleImages(validationSet, model, device):
+    for i in range(2):
+        validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
+        # TODO 
+        #print(f"annotations: {validateAnnotationsEx}")
+        outputAnnotatedImgCV(validateImgEx, validateAnnotationsEx, "datasetValidationExample_"+str(i).zfill(3) + ".png")
+    
+    for i in range(2):
+        validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
+        # TODO
+        #print(f"annotations for prediction: {validateAnnotationsEx}")
+        with torch.no_grad():
+            prediction = model([validateImgEx.to(device)])[0]
+
+        #again, very helpful: https://www.kaggle.com/code/yerramvarun/fine-tuning-faster-rcnn-using-pytorch/notebook
+        keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
+        finalPrediction = prediction
+    
+        #print("finalPrediction:")
+        #print(finalPrediction)
+        #finalPrediction['boxes'] = finalPrediction['boxes'][keptBoxes]
+        #finalPrediction['scores'] = finalPrediction['scores'][keptBoxes]
+        #finalPrediction['labels'] = finalPrediction['labels'][keptBoxes]
+        
+        
+        outputAnnotatedImgCV(validateImgEx, finalPrediction, "modelOutput_"+str(i).zfill(3) + ".png")
+        # does the following line need to be printed at all?????
+        print(len(finalPrediction['boxes']))
+
+
+
+
+# TODO: setting F1 scores
+def calculateF1Scores():
+    pass
+    '''
+    
+    image, annotatatios = validationSet.__getitem__(idx)
+
+    annotations = {
+        "labels" : <tensorOfLabels>,
+        "boxes" : <tensorOfBoxes>
+    }
+
+    this:
+        keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
+    returns this:
+        torch.ops.torchvision.nms(boxes, scores, iou_threshold)
+
+    f1 = 2 * truePos / ((2 * truePos) + falsePos + falseNeg)
+
+
+    '''
+
+
+
+
+def main(hyperparameterInput = {}, searchResultDir = ""):
+
+    hyperparameters = setHyperParams(hyperparameterInput)
+
+
+    startDateTime = datetime.datetime.now()
+    modelDir = "SavedModels/" + searchResultDir + startDateTime.strftime("%m.%d.%y_%I.%M%p")
+    os.makedirs(modelDir, exist_ok = True)
+
+    print("EarVision 2.0 \n")
+
+    # NOTE: "EarDataset" is the working directory
+    #datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset")
+    datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset_Subsample")
+
+
+    # modularize setting the trainSet, validationSet?
+    trainSet, validationSet = setTrainingAndValidationSets(datasetFull, hyperparameters)
+    '''
+    validationSize = math.floor(len(datasetFull)*hyperparameters["validationPercentage"])
+    # Training and validation sets are split here. Could cross validation be done here? 
+    trainSet, validationSet = torch.utils.data.random_split(datasetFull,[len(datasetFull)-validationSize, validationSize], generator=torch.Generator().manual_seed(42)) #seed????
+
+    # is this line redefining trainSet? is the trainset the same as the original dataset here?
+    trainSet.dataset = deepcopy(datasetFull)
+    trainSet.dataset.isTrainingSet = True
+
+    print("Training Set size: ", len(trainSet))
+    print("Validation Set size: ", len(validationSet))
+    '''
+
+
+
     #wonder how useful changing the num_workers would be in this instance.
     trainingDataLoader = DataLoader(trainSet, batch_size = hyperparameters["batchSize"], shuffle=True, collate_fn = myCollate)
-    validationDataLoader = DataLoader(validationSet, batch_size = hyperparameters["batchSize"], shuffle=False, collate_fn = myCollate) #setting shuffle to False so it sees the exact same batches during each validation
 
+    #setting shuffle to False so it sees the exact same batches during each validation
+    # TODO: would shuffle=True help with cross validation?
+    validationDataLoader = DataLoader(validationSet, batch_size = hyperparameters["batchSize"], shuffle=False, collate_fn = myCollate) 
+    
         
     #Some code to output examples from validation set.
     os.makedirs("OutputImages", exist_ok=True)
-
+    '''
     for i in range(2):
         validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
         outputAnnotatedImgCV(validateImgEx, validateAnnotationsEx, "datasetValidationExample_"+str(i).zfill(3) + ".png")
-
+    '''
     device = findGPU()
 
     #try changing?  trainable_backbone_layers=3, box_score_thresh = 0.03, box_nms_thresh=0.4, 
-    '''
     model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
     rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
     rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
     rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
-    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"])
-    '''
-    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
-    rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
-    rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
-    rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
-    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh = 0.3, box_score_thresh = 0.15)
+    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh = hyperparameters["box_nms_thresh"], box_score_thresh = hyperparameters["box_score_thresh"])
     
     #awkward but unless you do this it defaults to 91 classes
     in_features = model.roi_heads.box_predictor.cls_score.in_features
     model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 3) #give it number of classes. includes background class as one of the counted classes
 
+
     model.to(device)
+
 
     #making a time-stamped folder for the training run.
     startDateTime = datetime.datetime.now()
     modelDir = "SavedModels/" + searchResultDir + startDateTime.strftime("%m.%d.%y_%I.%M%p")
     os.makedirs(modelDir, exist_ok = True)
+
 
     outputHyperparameterFile(hyperparameters, modelDir)
     outputDataSetList(trainSet, modelDir+"/TrainingSet.txt")
@@ -115,13 +222,17 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
     trainer.train()
     endTime = time.time()
 
+
     print("----------------------")
     print("ALL TRAINING COMPLETE")
     print("----------------------")
     print("\nTraining Time:", round((endTime-startTime)/60, 4), "minutes")
 
     model.eval()
-    
+
+    createExampleImages(validationSet, model, device)
+
+    '''
     for i in range(2):
         validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
         
@@ -131,17 +242,17 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
         #again, very helpful: https://www.kaggle.com/code/yerramvarun/fine-tuning-faster-rcnn-using-pytorch/notebook
         keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
         finalPrediction = prediction
-
-        '''
-        finalPrediction['boxes'] = finalPrediction['boxes'][keptBoxes]
-        finalPrediction['scores'] = finalPrediction['scores'][keptBoxes]
-        finalPrediction['labels'] = finalPrediction['labels'][keptBoxes]
-        '''
-
+    
+        
+        #finalPrediction['boxes'] = finalPrediction['boxes'][keptBoxes]
+        #finalPrediction['scores'] = finalPrediction['scores'][keptBoxes]
+        #finalPrediction['labels'] = finalPrediction['labels'][keptBoxes]
+        
+        
         outputAnnotatedImgCV(validateImgEx, finalPrediction, "modelOutput_"+str(i).zfill(3) + ".png")
-
+        # does the following line need to be printed at all?????
         print(len(finalPrediction['boxes']))
-            
+    ''' 
 
 def myCollate(batch):
     #from https://github.com/pytorch/vision/blob/main/references/detection/utils.py

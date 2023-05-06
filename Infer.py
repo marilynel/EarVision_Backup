@@ -12,15 +12,20 @@ import numpy as np
 import datetime
 from Train import outputAnnotatedImgCV, loadHyperparamFile
 from Utils import *
+import datetime
 
 
 def Infer(dirPath = os.getcwd()):
+    time = datetime.datetime.now().strftime('%m.%d_%H.%M')
+    numImagesHandAnno = 0
+    
     print("Running EarVision 2.0 Inference")
 
     print("----------------------")
     print("FINDING GPU")
     print("----------------------")
     print("Currently running CUDA Version: ", torch.version.cuda)
+
     #pointing to our GPU if available
     if torch.cuda.is_available():
         device = torch.device("cuda:0")
@@ -29,24 +34,9 @@ def Infer(dirPath = os.getcwd()):
         device = torch.device("cpu")
         print("Running on CPU. Device: ", device)
 
-    # Change if needed
-    #modelDir = "08.18.22_07.13PM"
-    #epochStr = "021"
-
-    #modelDir = "02.10.23_07.04PM"
-    #epochStr = "028"
-
-    #new w/o augmentations, validation = 0.2
-    #modelDir = "02.21.23_03.39PM"
-    #epochStr = "019"
+    # Change if needed, options below in function declaration
+    modelDir, epochStr = pickModel("pref")
     
-    #new model with augmentations
-    #modelDir = "02.24.23_03.23PM"  
-    #epochStr = "023"
-
-
-    modelDir = "02.27.23_02.06PM"
-    epochStr = "023"
 
     print("Loading Saved Model: ", modelDir,  "    Epoch: ", epochStr)
 
@@ -107,21 +97,27 @@ def Infer(dirPath = os.getcwd()):
                 print(str(e))
                 pass
     
-    outputDirectory = imageDirectory + "/InferenceOutput"
+    inferenceIdentifier = "InferenceOutput-" + modelDir[:8] + "-" + modelDir[9:] + "-" + epochStr + "-" + time
+    outputDirectory = imageDirectory + "/" + inferenceIdentifier
+
     os.makedirs(outputDirectory, exist_ok = True)
 
-    outFile = open(outputDirectory+ "/InferenceCounts.csv", "w")
+    newAnnoDir = outputDirectory + "/needAnnotations"
+    os.makedirs(newAnnoDir, exist_ok=True)
 
-    outFile.write("EarName,TrainingSet,PredictedFluor,PredictedNonFluor,PredictedTotal,PredictedTransmission,"+
-    "AmbiguousKernels,AmbiguousKernelPercentage,AverageEarScoreFluor,AverageEarScoreNonFluor,AverageEarScoreAll," +
-    "ActualFluor,ActualNonFluor,ActualAmbiguous,ActualTotal,ActualTransmission,"+
-    "FluorKernelDiff,FluorKernelABSDiff,NonFluorKernelDiff,NonFluorKernelABSDiff,TotalKernelDiff,TotalKernelABSDiff,TransmissionDiff,TranmissionABSDiff" +"\n")
+    outFile = open(outputDirectory + "/" + inferenceIdentifier + ".csv", "w")
+    outFile.write(
+        "EarName,TrainingSet,PredictedFluor,PredictedNonFluor,PredictedTotal,PredictedTransmission,AmbiguousKernels," +
+        "AmbiguousKernelPercentage,AverageEarScoreFluor,AverageEarScoreNonFluor,AverageEarScoreAll,ActualFluor," + 
+        "ActualNonFluor,ActualAmbiguous,ActualTotal,ActualTransmission,FluorKernelDiff,FluorKernelABSDiff," + 
+        "NonFluorKernelDiff,NonFluorKernelABSDiff,TotalKernelDiff,TotalKernelABSDiff,TransmissionDiff," + 
+        "TranmissionABSDiff,PredtoActTransmissionRatio\n"
+    )
 
-    #original code
-    #outFile.write("EarName,TrainingSet,PredictedFluor,PredictedNonFluor,PredictedTotal,PredictedTransmission,"+
-    #"AmbiguousKernels,AmbiguousKernelPercentage,AverageEarScoreFluor,AverageEarScoreNonFluor,AverageEarScoreAll," +
-    #"ActualFluor,ActualNonFluor,ActualTotal,ActualTransmission,"+
-    #"FluorKernelDiff,FluorPercentageDiff,NonFluorKernelDiff,NonFluorPercentageDiff,TotalKernelDiff,TotalPercentageDiff,TransmissionDiff,TranmissionPercentageDiff" +"\n")
+    listTransABSDiff = []
+    listPredActTransRatios = []
+    listPredAmbigs = []
+    listTransDiff = []
 
     for path in tqdm(imagePaths):
         #print("working on ", path)
@@ -183,7 +179,8 @@ def Infer(dirPath = os.getcwd()):
         '''
 
         fileName = path.replace("\\", "/").split("/")[-1]
-   
+
+        # Next three lines create files
         outputAnnotatedImgCV(imageTensor[0], finalPrediction, outputDirectory+"/"+ fileName.split(".")[0] + "_inference.png")
         outputPredictionAsXML(finalPrediction, outputDirectory+"/" + fileName.split(".")[0]+"_inference.xml")
         convertPVOC(outputDirectory+"/" + fileName.split(".")[0]+"_inference.xml", image.size)
@@ -193,15 +190,51 @@ def Infer(dirPath = os.getcwd()):
         predFluor = finalPrediction['labels'].tolist().count(2)  
     
 
-
+        # Nex line creates file AND returns number of ambiguous kernels!
         ambiguousKernelCount = findAmbiguousCalls(imageTensor[0], finalPrediction, outputDirectory+"/"+ fileName.split(".")[0] + "_inference.png")
-        ambiguousKernelPercentage = round(ambiguousKernelCount/(predFluor + predNonFluor - ambiguousKernelCount)*100, 3)     #take total counted kernels, subtract ambiguous kernel count, and use THAT as total to determine percentage
+        listPredAmbigs.append(ambiguousKernelCount)
+
+        earName = fileName.split(".")[0] 
+        outFile.write(earName+",")
+
+        inTrainingSet = False
+        if earName in trainingSet:
+            inTrainingSet = True
+
+        # inTrainingSet == False                if True?    no
+        # xmlAvail == False                     if true?    no
+        # ambiguousKernelCount >= 20            if true?    yes
+        
+        imgsForHandAnnotation = False
+        if not inTrainingSet and not xmlAvail and ambiguousKernelCount >= 20:
+            imgsForHandAnnotation = True
+
+
+        # TODO: add unedited image to handAnno folder 
+        # check parameters into unmarkedImg() as well as usage internal to function
+
+        if imgsForHandAnnotation:
+            numImagesHandAnno += 1
+            #unmarkedImg(path, newAnnoDir+"/"+ fileName.split(".")[0] + "_original.png")
+            outputAnnotatedImgCV(imageTensor[0], finalPrediction, newAnnoDir+"/"+ fileName.split(".")[0] + "_inference.png")
+            outputPredictionAsXML(finalPrediction, newAnnoDir+"/" + fileName.split(".")[0]+"_inference.xml")
+            convertPVOC(newAnnoDir+"/" + fileName.split(".")[0]+"_inference.xml", image.size)
+            x = findAmbiguousCalls(imageTensor[0], finalPrediction, newAnnoDir+"/"+ fileName.split(".")[0] + "_inference.png")
+
+        try:
+            ambiguousKernelPercentage = round(ambiguousKernelCount/(predFluor + predNonFluor - ambiguousKernelCount)*100, 3)     #take total counted kernels, subtract ambiguous kernel count, and use THAT as total to determine percentage
+        except:
+            ambiguousKernelPercentage  = "N/A"
 
 
         predNonFluor -= ambiguousKernelCount
         predFluor -= ambiguousKernelCount 
         predTotal = predFluor + predNonFluor 
-        predTransmission =   predFluor /  (predTotal) * 100
+
+        try:
+            predTransmission =   predFluor /  (predTotal) * 100
+        except:
+            predTransmission = "N/A"
 
         scores = finalPrediction['scores']
         labels = finalPrediction['labels']
@@ -214,13 +247,11 @@ def Infer(dirPath = os.getcwd()):
         avgEarScoreNonFluor = round(np.mean(nonFluorScores), 3)
         avgEarScoreAll = round(torch.mean(scores).item(), 3)
         
+        # copy and pasted above for subfolder sorting -- will this work??
+        #earName = fileName.split(".")[0] 
+        #outFile.write(earName+",")
 
-        earName = fileName.split(".")[0] 
-        outFile.write(earName+",")
-
-        inTrainingSet = False
-        if earName in trainingSet:
-            inTrainingSet = True
+        
 
         if(inTrainingSet):
             outFile.write("True,")
@@ -233,34 +264,65 @@ def Infer(dirPath = os.getcwd()):
 
         if(xmlAvail):
             #write to actual values to outFile
-            outFile.write(str(actualFluor)+"," + str(actualNonFluor) + "," + str(actualAmb) + "," + str(actualTotal) + ","  + str(actualTransmission) + "," )
+            outFile.write(f"{actualFluor},{actualNonFluor},{actualAmb},{actualTotal},{actualTransmission},")
 
-            # metricList = [fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, totalKernelABSDiff, transmissionDiff, transmissionABSDiff]
-
-            fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, \
-            totalKernelDiff, totalKernelABSDiff,  transmissionDiff, transmissionABSDiff = calculateCountMetrics([ predFluor, predNonFluor ], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
+            fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, \
+                totalKernelABSDiff,  transmissionDiff, transmissionABSDiff = calculateCountMetrics([predFluor, \
+                predNonFluor], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
             
-            # original code
-            #fluorKernelDiff, fluorPercentageDiff, nonFluorKernelDiff, nonFluorPercentageDiff, \
-            #totalKernelDiff, totalPercentageDiff,  transmissionDiff, transmissionPercentageDiff = calculateCountMetrics([ predFluor, predNonFluor ], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
-            
-            #write the metric comparisons between prediced and actual to outFile
+            #write the metric comparisons between prediced and actual to outFile            
+            outFile.write(
+                f"{fluorKernelDiff},{fluorKernelABSDiff},{nonFluorKernelDiff},{nonFluorKernelABSDiff}," + 
+                f"{totalKernelDiff},{totalKernelABSDiff},{transmissionDiff},{transmissionABSDiff}," + 
+                f"{predTransmission/actualTransmission}"
+            )
 
-            outFile.write( str(fluorKernelDiff) + "," + str(fluorKernelABSDiff) + "," + 
-            str(nonFluorKernelDiff) + "," + str(nonFluorKernelABSDiff)+","+str(totalKernelDiff)+","+str(totalKernelABSDiff)+"," +
-            str(transmissionDiff)+","+str(transmissionABSDiff))
-
-            # oridginal code
-            #outFile.write( str(fluorKernelDiff) + "," + str(fluorPercentageDiff) + "," + 
-            #str(nonFluorKernelDiff) + "," + str(nonFluorPercentageDiff)+","+str(totalKernelDiff)+","+str(totalPercentageDiff)+"," +
-            #str(transmissionDiff)+","+str(transmissionPercentageDiff))
+            listTransDiff.append(transmissionDiff)
+            if not inTrainingSet:
+                listTransABSDiff.append(transmissionABSDiff)
+                listPredActTransRatios.append(predTransmission/actualTransmission)
 
         outFile.write("\n")
         
 
-        #print(" ")
     outFile.write("Model," + modelDir + ",Epoch," + epochStr)
     outFile.close()
+
+    with open(outputDirectory+ "/InferenceStats-" + modelDir + "-" + epochStr + ".csv", "w") as statsFile:
+        statsFile.write(
+            "Inference,Model,Date,NotInTrainingSetAvgTransABSDiff,NotInTrainingSetAvgPredActTransRatio," +
+            "NumberImagesForHandAnnotation,AllImagesAvgPredAmbigs,AllAnnoImagesAvgTransDiff\n")
+        statsFile.write(
+            # Inference Identifier
+            f"{inferenceIdentifier},{modelDir}_{epochStr},{time}," + 
+            f"{sum(listTransABSDiff)/len(listTransABSDiff)}," + 
+            f"{sum(listPredActTransRatios)/len(listPredActTransRatios)},{numImagesHandAnno}," +
+            f"{sum(listPredAmbigs)/len(listPredAmbigs)},{sum(listTransDiff)/len(listTransDiff)}\n"
+        )
+
+
+def pickModel(id):
+    '''return modelDir, epochStr'''
+    if id == "oldAug":
+        return "08.18.22_07.13PM", "021"
+    elif id == "feb10":
+        return "02.10.23_07.04PM", "028"
+    elif id == "feb21":
+        return "02.21.23_03.39PM", "019"
+    elif id == "feb24":                     # new model with augmentations
+        return "02.24.23_03.23PM", "023"
+    elif id == "feb2702":
+        return "02.27.23_02.06PM", "023"
+    elif id == "feb2706":
+        return "02.27.23_06.02PM", "024"
+    elif id == "pref" or id == "march06":   # this is the model & epoch John is currently using for the Maize meeting
+        return "03.06.23_12.55PM", "022"
+    elif id == "apr13":
+        return "04.13.23_04.13PM", "014"
+    elif id == "apr21":
+        return "04.21.23_09.46AM", "029"
+    elif id == "apr25":
+        return "04.25.23_07.46AM", "014"
 
 
 if __name__ == "__main__":
