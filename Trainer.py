@@ -10,7 +10,7 @@ from Utils import *
 
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
 from torchmetrics import F1Score
-
+from torchvision.ops import box_iou
 
 
 #This Trainer class is what actually handles the training loop, given a model and the dataset
