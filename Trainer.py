@@ -152,7 +152,9 @@ class Trainer():
                 with torch.no_grad():
                     #the reason we run this through a second time just to get the outputs is due to a PyTorch F-CNN implementation quirk -- needs to be in eval() mode to get actual outputs.
                     
-                    finalPredictions = self.network(images) 
+                    finalPredictions = self.network(images)
+
+
                     
                     # TODO: take this out later?
                     #print("Predictions: ", finalPredictions[0]['boxes'])
@@ -268,9 +270,49 @@ class Trainer():
                     self.network.eval()
                     predictions = self.network(images)
 
-                    #do we need NMS???
+                    #### START HERE F1 ####
+                    # do we need NMS???
                     finalPredictions = predictions
-                    
+
+                    ious = box_iou(finalPredictions[0]['boxes'], annotations[0]['boxes'])
+
+                    print(ious)
+
+                    listActBoxes = [i for i in range(0, len(annotations[0]['boxes']))]
+                    foundActBoxes = []
+
+                    tp, fp, fn = 0, 0, 0
+
+                    for i in range(0, len(ious)):
+                        match = False
+                        # print(f"i: {i}")
+                        for j in range(0, len(ious[i])):
+                            # print(f"j: {j}")
+                            if ious[i][j] >= 0.7:
+                                print(f"prediction {i} is a true positive for {listActBoxes[j]}")
+                                match = True
+                                foundActBoxes.append(listActBoxes[j])
+                                tp += 1
+                                # break
+                        if not match:
+                            print(f"prediction {i} is a false positive")
+                            fp += 1
+
+                    for box in listActBoxes:
+                        if box not in foundActBoxes:
+                            print(f"ground truth box {box} is a false negative")
+                            fn += 1
+
+                    print(f"True positives: {tp}")
+                    print(f"False positives: {fp}")
+                    print(f"False negatives: {fn}")
+
+                    print()
+
+                    f1score = (2 * tp) / ((2 * tp) + fp + fn)
+
+                    print(f"F1 score: {f1score}")
+
                     # TODO: take back out later?
                     #print("p", finalPredictions[0]['boxes'], "a:", annotations[0]['boxes'])
 
