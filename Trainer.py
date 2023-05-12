@@ -325,7 +325,8 @@ class Trainer():
                     self.network.eval()
                     predictions = self.network(images)
 
-                    #do we need NMS???
+                    #### START HERE F1 ####
+                    # do we need NMS???
                     finalPredictions = predictions
 
                     # labels = [None, "nonfluorescent",  "fluorescent"]

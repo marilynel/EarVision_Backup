@@ -117,15 +117,97 @@ def createExampleImages(validationSet, model, device, modelDir):
 
 
 
+<<<<<<< HEAD
+=======
+# TODO: setting F1 scores
+def calculateF1Scores():
+    pass
+    '''
+    
+    image, annotatatios = validationSet.__getitem__(idx)
+
+    annotations = {
+        "labels" : <tensorOfLabels>,
+        "boxes" : <tensorOfBoxes>
+    }
+
+    this:
+        keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
+    returns this:
+        torch.ops.torchvision.nms(boxes, scores, iou_threshold)
+
+    f1 = 2 * truePos / ((2 * truePos) + falsePos + falseNeg)
+
+
+    '''
+
+
+def myCollate(batch):
+    # from https://github.com/pytorch/vision/blob/main/references/detection/utils.py
+
+    '''
+    print("Batch")
+    for b in batch:
+        print(b)
+        print("--")
+    print("---")
+    print("tuple")
+    for t in tuple(zip(*batch)):
+        print(t)
+        print("--")
+    '''
+    # slightly unclear about why this is needed, but it resolves eror re: different sized tensors.
+    # is the different size tensors from different numbers of objects in diff images?
+
+    return tuple(zip(*batch))
+
+
+def outputDataSetList(dataSet, fileName):
+    outFile = open(fileName, "w")
+    # the Subset class is so awkward!
+    for i in dataSet.indices:
+        outFile.write(dataSet.dataset.imagePaths[i] + "\n")
+    outFile.close()
+
+
+def loadHyperparamFile(fileName="HyperparametersConfig.txt"):
+    '''Loads in .txt file with the various hyperparameter values for the training run.'''
+
+    hyperparameters = {}
+    with open(fileName, 'r') as f:
+        fileLines = f.readlines()
+
+    for l in fileLines:
+        if l[0] != "#" and l != "\n":
+            parameterEntry = l.strip().split("=")
+            key = parameterEntry[0].strip()
+            value = parameterEntry[1].lstrip()
+            if (value.isnumeric()):  # should convert integer str params to ints
+                value = int(value)
+            else:
+                try:
+                    value = float(value)  # should convert float str params to float
+                except:
+                    value = value  # should grab any str str params as str
+            hyperparameters[key] = value
+
+    return hyperparameters
+
+
+def outputHyperparameterFile(hyperparams, dir):
+    outFile = open(dir + "/Hyperparameters.txt", "w")
+    for key, value in hyperparams.items():
+        outFile.write(str(key) + " = " + str(value) + "\n")
+    outFile.close()
+
+>>>>>>> cdd30d8406e0fb69061f92ac15d4d7dc715687d4
 
 def main(hyperparameterInput = {}, searchResultDir = ""):
 
     hyperparameters = setHyperParams(hyperparameterInput)
 
 
-    startDateTime = datetime.datetime.now()
-    modelDir = "SavedModels/" + searchResultDir + startDateTime.strftime("%m.%d.%y_%I.%M%p")
-    os.makedirs(modelDir, exist_ok = True)
+
 
     print("EarVision 2.0 \n")
 
@@ -199,63 +281,6 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
 
 
 
-def myCollate(batch):
-    #from https://github.com/pytorch/vision/blob/main/references/detection/utils.py
-    
-    '''
-    print("Batch")
-    for b in batch:
-        print(b)
-        print("--")
-    print("---")
-    print("tuple")
-    for t in tuple(zip(*batch)):
-        print(t)
-        print("--")
-    '''
-    #slightly unclear about why this is needed, but it resolves eror re: different sized tensors.
-    #is the different size tensors from different numbers of objects in diff images?
-
-    return tuple(zip(*batch))
-
-
-def outputDataSetList(dataSet, fileName):
-
-    outFile = open(fileName, "w")
-    #the Subset class is so awkward!
-    for i in dataSet.indices:
-        outFile.write(dataSet.dataset.imagePaths[i] + "\n")
-    outFile.close()
-
-
-def loadHyperparamFile(fileName = "HyperparametersConfig.txt"):
-    '''Loads in .txt file with the various hyperparameter values for the training run.'''
-
-    hyperparameters = {}
-    with open(fileName, 'r') as f:
-        fileLines = f.readlines()
-    
-    for l in fileLines:
-        if l[0]!= "#" and l!="\n":
-            parameterEntry = l.strip().split("=")
-            key = parameterEntry[0].strip()
-            value = parameterEntry[1].lstrip()
-            if(value.isnumeric()):    #should convert integer str params to ints
-                value = int(value)
-            else:
-                try:
-                    value = float(value)       #should convert float str params to float
-                except:
-                    value = value              #should grab any str str params as str
-            hyperparameters[key] = value
-
-    return hyperparameters
-
-def outputHyperparameterFile(hyperparams, dir):
-    outFile = open(dir+"/Hyperparameters.txt", "w")
-    for key, value in hyperparams.items():
-        outFile.write(str(key)+ " = " + str(value)+"\n")
-    outFile.close()
 
 if __name__ == "__main__":
     hyperparameterFile = loadHyperparamFile()
