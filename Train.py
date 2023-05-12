@@ -19,8 +19,7 @@ from Trainer import *
 from Dataset import ObjectDetectionDataset
 from Utils import *
 
-# may not need this here?
-from torchmetrics import F1Score
+
 
 
 def setHyperParams(hyperParameterInput):
@@ -85,12 +84,13 @@ def setTrainingAndValidationSets(datasetFull, hyperparameters):
 
 
 # Is this even necessary??????
-def createExampleImages(validationSet, model, device):
+##### TODO MARILYN: change range(whatever) back to range(2)
+def createExampleImages(validationSet, model, device, modelDir):
     for i in range(2):
         validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
         # TODO 
         #print(f"annotations: {validateAnnotationsEx}")
-        outputAnnotatedImgCV(validateImgEx, validateAnnotationsEx, "datasetValidationExample_"+str(i).zfill(3) + ".png")
+        outputAnnotatedImgCV(validateImgEx, validateAnnotationsEx, modelDir + "/datasetValidationExample_"+str(i).zfill(3) + ".png")
     
     for i in range(2):
         validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
@@ -110,34 +110,10 @@ def createExampleImages(validationSet, model, device):
         #finalPrediction['labels'] = finalPrediction['labels'][keptBoxes]
         
         
-        outputAnnotatedImgCV(validateImgEx, finalPrediction, "modelOutput_"+str(i).zfill(3) + ".png")
+        outputAnnotatedImgCV(validateImgEx, finalPrediction, modelDir + "/modelOutput_"+str(i).zfill(3) + ".png")
         # does the following line need to be printed at all?????
         print(len(finalPrediction['boxes']))
 
-
-
-
-# TODO: setting F1 scores
-def calculateF1Scores():
-    pass
-    '''
-    
-    image, annotatatios = validationSet.__getitem__(idx)
-
-    annotations = {
-        "labels" : <tensorOfLabels>,
-        "boxes" : <tensorOfBoxes>
-    }
-
-    this:
-        keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
-    returns this:
-        torch.ops.torchvision.nms(boxes, scores, iou_threshold)
-
-    f1 = 2 * truePos / ((2 * truePos) + falsePos + falseNeg)
-
-
-    '''
 
 
 
@@ -154,24 +130,13 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
     print("EarVision 2.0 \n")
 
     # NOTE: "EarDataset" is the working directory
-    #datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset")
-    datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset_Subsample")
+    datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset")
+    #datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset_Subsample")
 
 
     # modularize setting the trainSet, validationSet?
     trainSet, validationSet = setTrainingAndValidationSets(datasetFull, hyperparameters)
-    '''
-    validationSize = math.floor(len(datasetFull)*hyperparameters["validationPercentage"])
-    # Training and validation sets are split here. Could cross validation be done here? 
-    trainSet, validationSet = torch.utils.data.random_split(datasetFull,[len(datasetFull)-validationSize, validationSize], generator=torch.Generator().manual_seed(42)) #seed????
 
-    # is this line redefining trainSet? is the trainset the same as the original dataset here?
-    trainSet.dataset = deepcopy(datasetFull)
-    trainSet.dataset.isTrainingSet = True
-
-    print("Training Set size: ", len(trainSet))
-    print("Validation Set size: ", len(validationSet))
-    '''
 
 
 
@@ -230,29 +195,9 @@ def main(hyperparameterInput = {}, searchResultDir = ""):
 
     model.eval()
 
-    createExampleImages(validationSet, model, device)
+    createExampleImages(validationSet, model, device, modelDir)
 
-    '''
-    for i in range(2):
-        validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
-        
-        with torch.no_grad():
-            prediction = model([validateImgEx.to(device)])[0]
 
-        #again, very helpful: https://www.kaggle.com/code/yerramvarun/fine-tuning-faster-rcnn-using-pytorch/notebook
-        keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
-        finalPrediction = prediction
-    
-        
-        #finalPrediction['boxes'] = finalPrediction['boxes'][keptBoxes]
-        #finalPrediction['scores'] = finalPrediction['scores'][keptBoxes]
-        #finalPrediction['labels'] = finalPrediction['labels'][keptBoxes]
-        
-        
-        outputAnnotatedImgCV(validateImgEx, finalPrediction, "modelOutput_"+str(i).zfill(3) + ".png")
-        # does the following line need to be printed at all?????
-        print(len(finalPrediction['boxes']))
-    ''' 
 
 def myCollate(batch):
     #from https://github.com/pytorch/vision/blob/main/references/detection/utils.py
