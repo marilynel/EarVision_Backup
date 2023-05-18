@@ -79,6 +79,10 @@ class Trainer():
         2 = fluorescent
         '''
         fluorPredBoxes, nonFluorPredBoxes = [], []
+
+        #print(f"num preds = {len(preds['boxes'])} ({len(preds['labels'])})")
+        #print(f"num target = {len(target['boxes'])} ({len(target['labels'])})")
+
         for i in range(0, len(preds["boxes"])):
             if preds["labels"][i] == 1:
                 nonFluorPredBoxes.append(torch.as_tensor(preds["boxes"][i]))
@@ -96,16 +100,30 @@ class Trainer():
             else:
                 print(f"ERROR -- Weird label: {target['labels'][i]}")
 
-        fab = torch.stack(fluorActBoxes)
-        nfab = torch.stack(fluorActBoxes)
+        fab = torch.empty(0)
+        #fab = torch.empty(1,4)#.fill_(0.)
+        nfab = torch.empty(0)
+        #nfab = torch.empty(1,4)#.fill_(0.)
+
+        if fluorActBoxes:
+            fab = torch.stack(fluorActBoxes)
+        if nonFluorActBoxes:
+            nfab = torch.stack(nonFluorActBoxes)
+        
         fpb = torch.empty(0)
+        #fpb = torch.empty(1,4)#.fill_(0.)
         nfpb = torch.empty(0)
+        #nfpb = torch.empty(1,4)#.fill_(0.)
 
         if fluorPredBoxes:
             fpb = torch.stack(fluorPredBoxes)
         if nonFluorPredBoxes:
             nfpb = torch.stack(nonFluorPredBoxes)
         
+        #print(f"fpb: {fpb}")
+        #print(f"nfpb: {nfpb}")
+        
+
         return fpb, fab, nfpb, nfab
 
 
@@ -116,23 +134,39 @@ class Trainer():
         boxIdx = [i for i in range(0, numActualBoxes)]
         foundBoxes = []
 
+        #print(f"before boxIdx = {boxIdx}")
+        #print(f"before foundBoxes = {foundBoxes}")
+
         if ious is not None:
+            #print(f"ious is not none")
             for i in range(0, len(ious)):
                 match = False
+                #print(f"iou[{i}] = {ious[i]}")
                 for j in range(0, len(ious[i])):
+                    #print(f"j = {j}")
                     if ious[i][j] >= 0.7:
                         # TODO: what if there are two boxes with >= 0.7 overlap??? is that possible???
+                        #print(f"at i = {i}, j = {j}, iou value {ious[i][j]} is greater than or equal to 0.7")
                         match = True
+                        #print(f"match is {match}")
                         foundBoxes.append(boxIdx[j])
+                        #print(f"foundBoxes contains: {foundBoxes}")
                         truePos += 1
+                        #print(f"truePos = {truePos}")
                         # break
                 if not match:
                     falsePos += 1
-
+                    #print(f"only print me if match is false (did not find a matching box) for {i}")
+                    #print(f"falsePos = {falsePos}")
+        #print(f"\n after boxIdx = {boxIdx}")
+        #print(f"after foundBoxes = {foundBoxes}")
         for box in boxIdx:
+            #print(f"for {box} in boxIdx:")
             if box not in foundBoxes:
+                #print(f"\t{box} is not in foundBoxes")
                 #print(f"ground truth box {box} is a false negative")
                 falseNeg += 1
+                #print(f"\tfalseNeg = {falseNeg}")
 
         boxIdx.clear()
         foundBoxes.clear()
@@ -225,7 +259,8 @@ class Trainer():
                     #the reason we run this through a second time just to get the outputs is due to a PyTorch F-CNN implementation quirk -- needs to be in eval() mode to get actual outputs.
                     
                     finalPredictions = self.network(images) 
-                    
+                    #print(f"final predictions are: \n{finalPredictions}")
+                    #print(f"number of final predictions: {len(finalPredictions)}")
                     for i, p in enumerate(finalPredictions):
                         '''
                         Count total predicted fluor, predicted nonfluor, actual fluor, and actual nonfluor for an image.
@@ -339,51 +374,66 @@ class Trainer():
                         '''                        
 
                         #### TODO remove after testing
-                        predictedFluorCnttest = p['labels'].tolist().count(2)
-                        predictedNonFluorCnttest = p['labels'].tolist().count(1)
+                        predictedFluorCnttest = finalPredictions[k]['labels'].tolist().count(2)
+                        predictedNonFluorCnttest = finalPredictions[k]['labels'].tolist().count(1)
                         actualFluorCnttest = annotations[k]['labels'].tolist().count(2)
                         actualNonFluorCnttest = annotations[k]['labels'].tolist().count(1)
                         ######
 
 
 
-                        if finalPredictions[k]["boxes"].size(dim = 1) != 0:
+                        if finalPredictions[k]["boxes"].size(dim = 0) != 0 and annotations[k]["boxes"].size()[0] != 0:
                         
                             fluorPredBoxes, fluorActBoxes, nonFluorPredBoxes, nonFluorActBoxes = self.splitBoxesByLabel(finalPredictions[k], annotations[k])
 
                             iousFluor, iousNonFluor = None, None
-                            if fluorPredBoxes.size(dim = 0) != 0:
+                            #if fluorPredBoxes.size(dim = 0) != 0:
+
+                            '''
+                            TODO: 
+                            currently not accountoing for situations where:
+                                ->  there are no predictions
+                                ->  there are no actual boxes
+                            figure out how to handle them!! (currenlty appended to dataset as 0s)
+
+                            '''
+
+
+                            if fluorPredBoxes.size()[0] != 0 and fluorActBoxes.size()[0] != 0:
+                                print(f"first: {fluorPredBoxes}")
+                                print(f"second: {fluorActBoxes}")
                                 iousFluor = box_iou(fluorPredBoxes, fluorActBoxes)
 
-                            if nonFluorPredBoxes.size(dim = 0) != 0:
+                            #if nonFluorPredBoxes.size(dim = 0) != 0:
+                            if nonFluorPredBoxes.size()[0] != 0 and nonFluorActBoxes.size()[0] != 0:
+                                print(f"third: {nonFluorPredBoxes}")
+                                print(f"fourth: {nonFluorActBoxes}")
+                                #if nonFluorActBoxes.size()[0] == 0:
+                                    # deal with it yere
+                                    #pass
+                                #print("WHAT's UP:", nonFluorPredBoxes, nonFluorActBoxes)
                                 iousNonFluor = box_iou(nonFluorPredBoxes, nonFluorActBoxes)   
 
 
-                            truePosFluor, falsePosFluor, falseNegFluor = self.compPredsVsAnnotation(iousFluor, len(fluorActBoxes))
-                            truePosNonFluor, falsePosNonFluor, falseNegNonFluor = self.compPredsVsAnnotation(iousNonFluor, len(nonFluorActBoxes))
 
 
-                            f1FluorValues.append((2 * truePosFluor) / ((2 * truePosFluor) + falsePosFluor + falseNegFluor))
-
-
-                            '''
-                            TODO:
-
-                            F1 for nonfluor is really low -->
-                                    too many false positives or false negatives? 
-                            '''
-
-
-                            f1NonFluorValues.append((2 * truePosNonFluor) / ((2 * truePosNonFluor) + falsePosNonFluor + falseNegNonFluor))
-
-                            # TODO: start by looking at these results for the most recent model; may help get an idea why the nonfluor vals are so wonky
-
-                            print()
-                            print(f"image {k} counts: {actualFluorCnttest} actual fluor kernels, {predictedFluorCnttest} predicted fluor kernels, {actualNonFluorCnttest} actual nonfluor kernels, {predictedNonFluorCnttest} predicted nonfluor kernels")
-                            print(f"image {k} nonfluorescent kernels: {truePosNonFluor} true positive, {falsePosNonFluor} false positive, {falseNegNonFluor} false negative, F1 = {(2 * truePosNonFluor) / ((2 * truePosNonFluor) + falsePosNonFluor + falseNegFluor)}")
-                            print(f"image {k} fluorescent kernels: {truePosFluor} true positive, {falsePosFluor} false positive, {falseNegFluor} false negative, F1 = {(2 * truePosFluor) / ((2 * truePosFluor) + falsePosFluor + falseNegFluor)}")
-                            print()
+                            #print(f"num fluor actual boxes: {len(fluorActBoxes)}")
                         
+                            #print(f"num nonfluor acutal boxes: {len(nonFluorActBoxes)}")
+                            if iousFluor is not None:
+                                truePosFluor, falsePosFluor, falseNegFluor = self.compPredsVsAnnotation(iousFluor, len(fluorActBoxes))
+                                f1FluorValues.append((2 * truePosFluor) / ((2 * truePosFluor) + falsePosFluor + falseNegFluor))
+                            #else:
+                            #    f1FluorValues.append("none")
+
+                            if iousNonFluor is not None:
+                                truePosNonFluor, falsePosNonFluor, falseNegNonFluor = self.compPredsVsAnnotation(iousNonFluor, len(nonFluorActBoxes))
+                                f1NonFluorValues.append((2 * truePosNonFluor) / ((2 * truePosNonFluor) + falsePosNonFluor + falseNegNonFluor))
+                            #else:
+                            #    f1NonFluorValues.append("none")
+    
+
+                            
                         else:
                             f1FluorValues.append(0)
                             f1NonFluorValues.append(0)
@@ -439,6 +489,13 @@ class Trainer():
             #valMAP = validationMAP.compute()
             #validationMAP.reset()
             #print("Validation mAP: " , valMAP)
+
+
+            '''
+            TODO: MARILYN:
+            -   if an F1 score is whacky (no preds, no acts) it is currently going in as a 0 --> should it???
+            -   decide how to evaluate and note down 0/0 (nan) situations
+            '''
 
             f1FluorAvg = sum(f1FluorValues) / len(f1FluorValues)
             f1NonFluorAvg = sum(f1NonFluorValues) / len(f1NonFluorValues)

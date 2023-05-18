@@ -117,29 +117,6 @@ def createExampleImages(validationSet, model, device, modelDir):
 
 
 
-<<<<<<< HEAD
-=======
-# TODO: setting F1 scores
-def calculateF1Scores():
-    pass
-    '''
-    
-    image, annotatatios = validationSet.__getitem__(idx)
-
-    annotations = {
-        "labels" : <tensorOfLabels>,
-        "boxes" : <tensorOfBoxes>
-    }
-
-    this:
-        keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
-    returns this:
-        torch.ops.torchvision.nms(boxes, scores, iou_threshold)
-
-    f1 = 2 * truePos / ((2 * truePos) + falsePos + falseNeg)
-
-
-    '''
 
 
 def myCollate(batch):
@@ -200,7 +177,6 @@ def outputHyperparameterFile(hyperparams, dir):
         outFile.write(str(key) + " = " + str(value) + "\n")
     outFile.close()
 
->>>>>>> cdd30d8406e0fb69061f92ac15d4d7dc715687d4
 
 def main(hyperparameterInput = {}, searchResultDir = ""):
 

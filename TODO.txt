@@ -1,0 +1,17 @@
+General TODO list for Earvision
+
+TRAIN
+
+-	box_iou is not working with full dataset (Trainer.py, function train()); works with sample dataset -> need to fix
+-	develop hyperparameter search function
+	->	data output and saving
+	-> 	can I use gridsearch? or would it be better to do it manually?
+	->	what can I cut from Train to help speed up the process 
+	->	I want to do this on the whole dataset, but it may be better to split male and female?
+
+
+INFERENCE
+
+-	run inference on male dataset with 0306 model
+-	rerun inference on female dataset with 0306 model?
+-	record and compare stats for John
