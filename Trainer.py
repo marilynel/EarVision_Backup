@@ -180,30 +180,9 @@ class Trainer():
         epochs = self.hyperparameters["epochs"]
         # NOTE: above line is correct
         #epochs = 10
-        '''
-        goes from 0 to 1, the closer to 1 the better
-        will need to isolate to compare -> print(MAP['map'])
-        {
-            'map': tensor(0.2822), 
-            'map_50': tensor(0.5566), 
-            'map_75': tensor(0.2484), 
-            'map_small': tensor(0.0160), 
-            'map_medium': tensor(0.2720), 
-            'map_large': tensor(0.3679), 
-            'mar_1': tensor(0.0038), 
-            'mar_10': tensor(0.0374), 
-            'mar_100': tensor(0.3427), 
-            'mar_small': tensor(0.0126), 
-            'mar_medium': tensor(0.3395), 
-            'mar_large': tensor(0.4863), 
-            'map_per_class': tensor(-1.), 
-            'mar_100_per_class': tensor(-1.)
-        }
 
-        https://github.com/Lightning-AI/torchmetrics/blob/master/src/torchmetrics/detection/mean_ap.py
-        '''
-        
         # NOTE: if we go back to using MAP, just do vMAP
+        # MAP calculation is very time intensive, althought so is F1
         #validationMAP = MeanAveragePrecision(class_metrics = True)
         #validationMAP = MeanAveragePrecision(iou_thresholds=[0.5,0.75],class_metrics=False)
 
@@ -226,7 +205,6 @@ class Trainer():
             inTotalTotalABSDiff = 0
             inTotalTransmissionABSDiff = 0
 
-            # __getitem__() here
             for batch in tqdm(self.trainingLoader):
                 self.network.train()
                 images, annotations = batch
@@ -236,7 +214,6 @@ class Trainer():
                 
                 annotations = [{k: v.to(self.device) for k, v in t.items()} for t in annotations]
 
-                
                 # consider :  with torch.cuda.amp.autocast(enabled=scaler is not None):?
                 lossDict = self.forwardPass(images, annotations, train=True)
                 
@@ -259,8 +236,6 @@ class Trainer():
                     #the reason we run this through a second time just to get the outputs is due to a PyTorch F-CNN implementation quirk -- needs to be in eval() mode to get actual outputs.
                     
                     finalPredictions = self.network(images) 
-                    #print(f"final predictions are: \n{finalPredictions}")
-                    #print(f"number of final predictions: {len(finalPredictions)}")
                     for i, p in enumerate(finalPredictions):
                         '''
                         Count total predicted fluor, predicted nonfluor, actual fluor, and actual nonfluor for an image.
@@ -306,7 +281,6 @@ class Trainer():
 
             avgTrainingLoss = (trainingLossTotal / len(self.trainingLoader))
 
-            # MAP seems to be really time intensive
             
             print("Training loss:", avgTrainingLoss )
             print("Training Errors: ")
@@ -361,34 +335,24 @@ class Trainer():
                     predictions = self.network(images)
 
                     #### START HERE F1 ####
-                    # do we need NMS???
                     finalPredictions = predictions
 
                     # labels = [None, "nonfluorescent",  "fluorescent"]
                     #            0           1                 2  
-
                     for k in range(1, len(finalPredictions)):           
                         '''
                         "k" is an image in validation set. Iterate through predictions in validation set images and 
                         calculate F1 scores for each image; append to list.
                         '''                        
 
-                        #### TODO remove after testing
-                        predictedFluorCnttest = finalPredictions[k]['labels'].tolist().count(2)
-                        predictedNonFluorCnttest = finalPredictions[k]['labels'].tolist().count(1)
-                        actualFluorCnttest = annotations[k]['labels'].tolist().count(2)
-                        actualNonFluorCnttest = annotations[k]['labels'].tolist().count(1)
-                        ######
-
-
-
+                        # Make sure that something exists in annotations and predictions for that image
+                        # TODO: how should those situations be handled???
                         if finalPredictions[k]["boxes"].size(dim = 0) != 0 and annotations[k]["boxes"].size()[0] != 0:
                         
                             fluorPredBoxes, fluorActBoxes, nonFluorPredBoxes, nonFluorActBoxes = self.splitBoxesByLabel(finalPredictions[k], annotations[k])
 
                             iousFluor, iousNonFluor = None, None
-                            #if fluorPredBoxes.size(dim = 0) != 0:
-
+                            
                             '''
                             TODO: 
                             currently not accountoing for situations where:
@@ -398,42 +362,21 @@ class Trainer():
 
                             '''
 
-
+                            # These conditionals are necessary as an image may only have fluor or nonfluor data; above conditional will not catch
                             if fluorPredBoxes.size()[0] != 0 and fluorActBoxes.size()[0] != 0:
-                                print(f"first: {fluorPredBoxes}")
-                                print(f"second: {fluorActBoxes}")
                                 iousFluor = box_iou(fluorPredBoxes, fluorActBoxes)
 
-                            #if nonFluorPredBoxes.size(dim = 0) != 0:
                             if nonFluorPredBoxes.size()[0] != 0 and nonFluorActBoxes.size()[0] != 0:
-                                print(f"third: {nonFluorPredBoxes}")
-                                print(f"fourth: {nonFluorActBoxes}")
-                                #if nonFluorActBoxes.size()[0] == 0:
-                                    # deal with it yere
-                                    #pass
-                                #print("WHAT's UP:", nonFluorPredBoxes, nonFluorActBoxes)
                                 iousNonFluor = box_iou(nonFluorPredBoxes, nonFluorActBoxes)   
 
-
-
-
-                            #print(f"num fluor actual boxes: {len(fluorActBoxes)}")
-                        
-                            #print(f"num nonfluor acutal boxes: {len(nonFluorActBoxes)}")
                             if iousFluor is not None:
                                 truePosFluor, falsePosFluor, falseNegFluor = self.compPredsVsAnnotation(iousFluor, len(fluorActBoxes))
                                 f1FluorValues.append((2 * truePosFluor) / ((2 * truePosFluor) + falsePosFluor + falseNegFluor))
-                            #else:
-                            #    f1FluorValues.append("none")
 
                             if iousNonFluor is not None:
                                 truePosNonFluor, falsePosNonFluor, falseNegNonFluor = self.compPredsVsAnnotation(iousNonFluor, len(nonFluorActBoxes))
                                 f1NonFluorValues.append((2 * truePosNonFluor) / ((2 * truePosNonFluor) + falsePosNonFluor + falseNegNonFluor))
-                            #else:
-                            #    f1NonFluorValues.append("none")
     
-
-                            
                         else:
                             f1FluorValues.append(0)
                             f1NonFluorValues.append(0)

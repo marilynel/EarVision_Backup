@@ -15,3 +15,28 @@ INFERENCE
 -	run inference on male dataset with 0306 model
 -	rerun inference on female dataset with 0306 model?
 -	record and compare stats for John
+
+
+
+
+MeanAveragePrecision notes:
+goes from 0 to 1, the closer to 1 the better
+will need to isolate to compare -> print(MAP['map'])
+{
+	'map': tensor(0.2822), 
+	'map_50': tensor(0.5566), 
+	'map_75': tensor(0.2484), 
+	'map_small': tensor(0.0160), 
+	'map_medium': tensor(0.2720), 
+	'map_large': tensor(0.3679), 
+	'mar_1': tensor(0.0038), 
+	'mar_10': tensor(0.0374), 
+	'mar_100': tensor(0.3427), 
+	'mar_small': tensor(0.0126), 
+	'mar_medium': tensor(0.3395), 
+	'mar_large': tensor(0.4863), 
+	'map_per_class': tensor(-1.), 
+	'mar_100_per_class': tensor(-1.)
+}
+
+https://github.com/Lightning-AI/torchmetrics/blob/master/src/torchmetrics/detection/mean_ap.py
