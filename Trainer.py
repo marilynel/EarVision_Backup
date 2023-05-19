@@ -9,7 +9,8 @@ import os
 from Utils import *
 
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-from torchmetrics import F1Score
+#from torchmetrics import F1Score
+from torchvision.ops import box_iou
 
 
 
@@ -39,7 +40,7 @@ class Trainer():
                                "OutNonFluorKernelABSDiff,OutTotalKernelDiff,OutTotalKernelABSDiff,OutTransmissionDiff," + 
                                "OutTransmissionABSDiff,InFluorKernelDiff,InFluorABSDiff,InNonFluorKernelDiff," + 
                                "InNonFluorKernelABSDiff,InTotalKernelDiff,InTotalKernelABSDiff,InTransmissionDiff," + 
-                               "InTransmissionABSDiff,tMAP,valMAP\n")
+                               "InTransmissionABSDiff,f1Fluor,f1NonFluor\n")
 
 
     def forwardPass(self, images, annotations, train=False, trackMetrics = True):
@@ -50,9 +51,9 @@ class Trainer():
         modelOutput = self.network(images, annotations)
 
         return modelOutput
+    
 
-
-    def print_metrics(self, avgFluorKernelMiscount, avgFluorABSDiff, avgNonFluorKernelMiscount, avgNonFluorABSDiff, avgTotalKernelMiscount, avgTotalABSDiff, avgTransmissionDiff, avgTransmissionABSDiff):
+    def print_metrics(self, avgFluorKernelMiscount, avgFluorABSDiff, avgNonFluorKernelMiscount, avgNonFluorABSDiff, avgTotalKernelMiscount, avgTotalABSDiff, avgTransmissionDiff, avgTransmissionABSDiff,f1FluorAvg, f1NonFluorAvg):
         print("-Avg Fluor Kernel Miscount: ", avgFluorKernelMiscount)
         print("-Avg Fluor Kernel Miscount (Absolute Value): ", avgFluorABSDiff)
 
@@ -65,38 +66,123 @@ class Trainer():
         print("-Avg Transmission Diff: ", avgTransmissionDiff)
         print("-Avg Transmission Diff (Absolute Value):", avgTransmissionABSDiff)
 
+        print(f"-Avg Fluor F1 Score: {f1FluorAvg}")
+        print(f"-Avg NonFluor F1 Score: {f1NonFluorAvg}")
+
         print('----')
 
+
+    def splitBoxesByLabel(self, preds, target):
+        '''
+        0 = None (background)
+        1 = nonfluorescent
+        2 = fluorescent
+        '''
+        fluorPredBoxes, nonFluorPredBoxes = [], []
+
+        #print(f"num preds = {len(preds['boxes'])} ({len(preds['labels'])})")
+        #print(f"num target = {len(target['boxes'])} ({len(target['labels'])})")
+
+        for i in range(0, len(preds["boxes"])):
+            if preds["labels"][i] == 1:
+                nonFluorPredBoxes.append(torch.as_tensor(preds["boxes"][i]))
+            elif preds["labels"][i] == 2:
+                fluorPredBoxes.append(torch.as_tensor(preds["boxes"][i]))
+            else:
+                print(f"ERROR -- Weird label: {preds['labels'][i]}")
+
+        fluorActBoxes, nonFluorActBoxes = [], []
+        for i in range(0, len(target["boxes"])):
+            if target["labels"][i] == 1:
+                nonFluorActBoxes.append(torch.as_tensor(target["boxes"][i]))
+            elif target["labels"][i] == 2:
+                fluorActBoxes.append(torch.as_tensor(target["boxes"][i]))
+            else:
+                print(f"ERROR -- Weird label: {target['labels'][i]}")
+
+        fab = torch.empty(0)
+        #fab = torch.empty(1,4)#.fill_(0.)
+        nfab = torch.empty(0)
+        #nfab = torch.empty(1,4)#.fill_(0.)
+
+        if fluorActBoxes:
+            fab = torch.stack(fluorActBoxes)
+        if nonFluorActBoxes:
+            nfab = torch.stack(nonFluorActBoxes)
+        
+        fpb = torch.empty(0)
+        #fpb = torch.empty(1,4)#.fill_(0.)
+        nfpb = torch.empty(0)
+        #nfpb = torch.empty(1,4)#.fill_(0.)
+
+        if fluorPredBoxes:
+            fpb = torch.stack(fluorPredBoxes)
+        if nonFluorPredBoxes:
+            nfpb = torch.stack(nonFluorPredBoxes)
+        
+        #print(f"fpb: {fpb}")
+        #print(f"nfpb: {nfpb}")
+        
+
+        return fpb, fab, nfpb, nfab
+
+
+    def compPredsVsAnnotation(self, ious, numActualBoxes):                    
+                        
+        truePos, falsePos, falseNeg = 0, 0, 0                
+
+        boxIdx = [i for i in range(0, numActualBoxes)]
+        foundBoxes = []
+
+        #print(f"before boxIdx = {boxIdx}")
+        #print(f"before foundBoxes = {foundBoxes}")
+
+        if ious is not None:
+            #print(f"ious is not none")
+            for i in range(0, len(ious)):
+                match = False
+                #print(f"iou[{i}] = {ious[i]}")
+                for j in range(0, len(ious[i])):
+                    #print(f"j = {j}")
+                    if ious[i][j] >= 0.7:
+                        # TODO: what if there are two boxes with >= 0.7 overlap??? is that possible???
+                        #print(f"at i = {i}, j = {j}, iou value {ious[i][j]} is greater than or equal to 0.7")
+                        match = True
+                        #print(f"match is {match}")
+                        foundBoxes.append(boxIdx[j])
+                        #print(f"foundBoxes contains: {foundBoxes}")
+                        truePos += 1
+                        #print(f"truePos = {truePos}")
+                        # break
+                if not match:
+                    falsePos += 1
+                    #print(f"only print me if match is false (did not find a matching box) for {i}")
+                    #print(f"falsePos = {falsePos}")
+        #print(f"\n after boxIdx = {boxIdx}")
+        #print(f"after foundBoxes = {foundBoxes}")
+        for box in boxIdx:
+            #print(f"for {box} in boxIdx:")
+            if box not in foundBoxes:
+                #print(f"\t{box} is not in foundBoxes")
+                #print(f"ground truth box {box} is a false negative")
+                falseNeg += 1
+                #print(f"\tfalseNeg = {falseNeg}")
+
+        boxIdx.clear()
+        foundBoxes.clear()
+
+        return truePos, falsePos, falseNeg
+        
 
     def train(self):
 
         torch.set_grad_enabled(True) #enable the gradient
-        #epochs = self.hyperparameters["epochs"]
+        epochs = self.hyperparameters["epochs"]
         # NOTE: above line is correct
-        epochs = 10
+        #epochs = 10
 
-        # goes from 0 to 1, the closer to 1 the better
-        # will need to isolate to compare -> print(MAP['map'])
-        # {
-        #   'map': tensor(0.2822), 
-        #   'map_50': tensor(0.5566), 
-        #   'map_75': tensor(0.2484), 
-        #   'map_small': tensor(0.0160), 
-        #   'map_medium': tensor(0.2720), 
-        #   'map_large': tensor(0.3679), 
-        #   'mar_1': tensor(0.0038), 
-        #   'mar_10': tensor(0.0374), 
-        #   'mar_100': tensor(0.3427), 
-        #   'mar_small': tensor(0.0126), 
-        #   'mar_medium': tensor(0.3395), 
-        #   'mar_large': tensor(0.4863), 
-        #   'map_per_class': tensor(-1.), 
-        #   'mar_100_per_class': tensor(-1.)
-        # }
-
-        # https://github.com/Lightning-AI/torchmetrics/blob/master/src/torchmetrics/detection/mean_ap.py
         # NOTE: if we go back to using MAP, just do vMAP
-        #trainingMAP = MeanAveragePrecision(iou_thresholds=[0.5,0.75],class_metrics=False)
+        # MAP calculation is very time intensive, althought so is F1
         #validationMAP = MeanAveragePrecision(class_metrics = True)
         #validationMAP = MeanAveragePrecision(iou_thresholds=[0.5,0.75],class_metrics=False)
 
@@ -107,10 +193,11 @@ class Trainer():
             print("------------------")
 
             trainingLossTotal = 0
-            inTotalFluorKernelDiff = 0
 
-            inTotalNonFluorKernelDiff = 0
-            inTotalTotalKernelDiff = 0
+            # In sample differences in kernel counts, by type, across all in sample images (sum)
+            inTotalFluorKernelDiff = 0           
+            inTotalNonFluorKernelDiff = 0       
+            inTotalTotalKernelDiff = 0          
 
             inTotalTransmissionDiff = 0
             inTotalFluorKernelABSDiff = 0
@@ -118,7 +205,6 @@ class Trainer():
             inTotalTotalABSDiff = 0
             inTotalTransmissionABSDiff = 0
 
-            # __getitem__() here
             for batch in tqdm(self.trainingLoader):
                 self.network.train()
                 images, annotations = batch
@@ -128,11 +214,9 @@ class Trainer():
                 
                 annotations = [{k: v.to(self.device) for k, v in t.items()} for t in annotations]
 
-                
                 # consider :  with torch.cuda.amp.autocast(enabled=scaler is not None):?
                 lossDict = self.forwardPass(images, annotations, train=True)
                 
-
                 #loss reduction  -- mean vs. sum????
                 lossSum = sum(loss for loss in lossDict.values())
 
@@ -140,7 +224,6 @@ class Trainer():
                 
                 trainingLossTotal += lossSum
                 #trainingLossTotal += lossMean
-
 
                 lossSum.backward()
                 #lossMean.backward()
@@ -152,21 +235,16 @@ class Trainer():
                 with torch.no_grad():
                     #the reason we run this through a second time just to get the outputs is due to a PyTorch F-CNN implementation quirk -- needs to be in eval() mode to get actual outputs.
                     
-                    finalPredictions = self.network(images)
-
-
-                    
-                    # TODO: take this out later?
-                    #print("Predictions: ", finalPredictions[0]['boxes'])
-                    #print("Targets: ", annotations[0]['boxes'])
-                    
+                    finalPredictions = self.network(images) 
                     for i, p in enumerate(finalPredictions):
-                        # TODO: for new ambiguous labels, could grab here
+                        '''
+                        Count total predicted fluor, predicted nonfluor, actual fluor, and actual nonfluor for an image.
+                        Calculate metrics. 
+                        '''
                         predictedFluorCnt = p['labels'].tolist().count(2)
                         predictedNonFluorCnt = p['labels'].tolist().count(1)
                         actualFluorCnt = annotations[i]['labels'].tolist().count(2)
                         actualNonFluorCnt = annotations[i]['labels'].tolist().count(1)
-
                         
                         fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, \
                             totalKernelABSDiff, transmissionDiff, transmissionABSDiff = calculateCountMetrics([
@@ -186,17 +264,9 @@ class Trainer():
                         inTotalTransmissionABSDiff += transmissionABSDiff
 
 
-                        # TODO: F1 Score
-                        #target = torch.tensor()
-                        #preds = torch.tensor()
-                        # is this line usefule? f1_score(preds, target, task="multiclass", num_classes=3)
-                        #f1score = torchmetrics.F1Score(task="multiclass", num_classes=2) #, average=None)
-                        #
-                        #f1score.update(preds, target)
-
-                        
-
-
+            '''
+            Find average insample (training set) metrics across all images in training set
+            '''
             inAvgFluorKernelMiscount = inTotalFluorKernelDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
             inAvgFluorABSDiff = inTotalFluorKernelABSDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
 
@@ -211,34 +281,29 @@ class Trainer():
 
             avgTrainingLoss = (trainingLossTotal / len(self.trainingLoader))
 
-
-            # MAP seems to be really time intensive
             
             print("Training loss:", avgTrainingLoss )
-
             print("Training Errors: ")
 
             self.print_metrics(
                 inAvgFluorKernelMiscount, inAvgFluorABSDiff, inAvgNonFluorKernelMiscount, inAvgNonFluorABSDiff, 
-                inAvgTotalKernelMiscount, inAvgTotalABSDiff, inAvgTransmissionDiff, inAvgTransmissionABSDiff
+                inAvgTotalKernelMiscount, inAvgTotalABSDiff, inAvgTransmissionDiff, inAvgTransmissionABSDiff, "n/a", "n/a"
             )
 
             print("VALIDATING")
             #because of quirky reasons, the network needs to be in .train() mode to get the validation loss... silly
             #but it should be kosher since there are no dropout layers and the BatchNorms are frozen
             
+            f1FluorValues, f1NonFluorValues = [], []
+
             #self.network.eval()
             with torch.no_grad():
                 
                 totalFluorKernelDiff = 0
-
                 totalNonFluorKernelDiff = 0
                 totalTotalKernelDiff = 0
-
                 totalTransmissionDiff = 0
-
                 validationLossTotal = 0
-
                 totalFluorKernelABSDiff = 0
                 totalNonFluorKernelABSDiff = 0
                 totalTotalABSDiff = 0
@@ -262,7 +327,6 @@ class Trainer():
                     validationLossTotal += lossSum
                     #validationLossTotal += lossMean
              
-                    
                     #print("validaiton loss sum:", lossSum)
 
                     #now have to switch to eval to get actual predictions instead of losses. And the same batch has to run through model twice if you want both loss and accuracy metrics -__- 
@@ -271,62 +335,66 @@ class Trainer():
                     predictions = self.network(images)
 
                     #### START HERE F1 ####
-                    # do we need NMS???
                     finalPredictions = predictions
 
-                    ious = box_iou(finalPredictions[0]['boxes'], annotations[0]['boxes'])
+                    # labels = [None, "nonfluorescent",  "fluorescent"]
+                    #            0           1                 2  
+                    for k in range(1, len(finalPredictions)):           
+                        '''
+                        "k" is an image in validation set. Iterate through predictions in validation set images and 
+                        calculate F1 scores for each image; append to list.
+                        '''                        
 
-                    print(ious)
+                        # Make sure that something exists in annotations and predictions for that image
+                        # TODO: how should those situations be handled???
+                        if finalPredictions[k]["boxes"].size(dim = 0) != 0 and annotations[k]["boxes"].size()[0] != 0:
+                        
+                            fluorPredBoxes, fluorActBoxes, nonFluorPredBoxes, nonFluorActBoxes = self.splitBoxesByLabel(finalPredictions[k], annotations[k])
 
-                    listActBoxes = [i for i in range(0, len(annotations[0]['boxes']))]
-                    foundActBoxes = []
+                            iousFluor, iousNonFluor = None, None
+                            
+                            '''
+                            TODO: 
+                            currently not accountoing for situations where:
+                                ->  there are no predictions
+                                ->  there are no actual boxes
+                            figure out how to handle them!! (currenlty appended to dataset as 0s)
 
-                    tp, fp, fn = 0, 0, 0
+                            '''
 
-                    for i in range(0, len(ious)):
-                        match = False
-                        # print(f"i: {i}")
-                        for j in range(0, len(ious[i])):
-                            # print(f"j: {j}")
-                            if ious[i][j] >= 0.7:
-                                print(f"prediction {i} is a true positive for {listActBoxes[j]}")
-                                match = True
-                                foundActBoxes.append(listActBoxes[j])
-                                tp += 1
-                                # break
-                        if not match:
-                            print(f"prediction {i} is a false positive")
-                            fp += 1
+                            # These conditionals are necessary as an image may only have fluor or nonfluor data; above conditional will not catch
+                            if fluorPredBoxes.size()[0] != 0 and fluorActBoxes.size()[0] != 0:
+                                iousFluor = box_iou(fluorPredBoxes, fluorActBoxes)
 
-                    for box in listActBoxes:
-                        if box not in foundActBoxes:
-                            print(f"ground truth box {box} is a false negative")
-                            fn += 1
+                            if nonFluorPredBoxes.size()[0] != 0 and nonFluorActBoxes.size()[0] != 0:
+                                iousNonFluor = box_iou(nonFluorPredBoxes, nonFluorActBoxes)   
 
-                    print(f"True positives: {tp}")
-                    print(f"False positives: {fp}")
-                    print(f"False negatives: {fn}")
+                            if iousFluor is not None:
+                                truePosFluor, falsePosFluor, falseNegFluor = self.compPredsVsAnnotation(iousFluor, len(fluorActBoxes))
+                                f1FluorValues.append((2 * truePosFluor) / ((2 * truePosFluor) + falsePosFluor + falseNegFluor))
 
-                    print()
+                            if iousNonFluor is not None:
+                                truePosNonFluor, falsePosNonFluor, falseNegNonFluor = self.compPredsVsAnnotation(iousNonFluor, len(nonFluorActBoxes))
+                                f1NonFluorValues.append((2 * truePosNonFluor) / ((2 * truePosNonFluor) + falsePosNonFluor + falseNegNonFluor))
+    
+                        else:
+                            f1FluorValues.append(0)
+                            f1NonFluorValues.append(0)
 
-                    f1score = (2 * tp) / ((2 * tp) + fp + fn)
+                    #### END NEW ####
 
-                    print(f"F1 score: {f1score}")
-
-                    # TODO: take back out later?
-                    #print("p", finalPredictions[0]['boxes'], "a:", annotations[0]['boxes'])
 
                     #validationMAP.update(finalPredictions, annotations)
 
 
+
                     for i, p in enumerate(finalPredictions):
-                        # TODO: F1NOTE collect predicted and anno boxes here? to calculate f1 score.  where can I get IOU? https://pytorch.org/vision/stable/models/generated/torchvision.models.detection.fasterrcnn_resnet50_fpn.html#torchvision.models.detection.fasterrcnn_resnet50_fpn
+                        
                         predictedFluorCnt = p['labels'].tolist().count(2) 
                         predictedNonFluorCnt = p['labels'].tolist().count(1)
 
                         actualFluorCnt = annotations[i]['labels'].tolist().count(2)
                         actualNonFluorCnt = annotations[i]['labels'].tolist().count(1)
-
                         
                         fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, \
                             totalKernelABSDiff, transmissionDiff, transmissionABSDiff = calculateCountMetrics([ 
@@ -366,10 +434,24 @@ class Trainer():
             #print("Validation mAP: " , valMAP)
 
 
+            '''
+            TODO: MARILYN:
+            -   if an F1 score is whacky (no preds, no acts) it is currently going in as a 0 --> should it???
+            -   decide how to evaluate and note down 0/0 (nan) situations
+            '''
+
+            f1FluorAvg = sum(f1FluorValues) / len(f1FluorValues)
+            f1NonFluorAvg = sum(f1NonFluorValues) / len(f1NonFluorValues)
+            
+
             print("Validation Loss: " , avgValidationLoss)
             print("Validation Errors: ")
             
-            self.print_metrics(avgFluorKernelMiscount, avgFluorABSDiff, avgNonFluorKernelMiscount, avgNonFluorABSDiff, avgTotalKernelMiscount, avgTotalABSDiff, avgTransmissionDiff, avgTransmissionABSDiff)
+            self.print_metrics(
+                avgFluorKernelMiscount, avgFluorABSDiff, avgNonFluorKernelMiscount, avgNonFluorABSDiff, 
+                avgTotalKernelMiscount, avgTotalABSDiff, avgTransmissionDiff, avgTransmissionABSDiff, f1FluorAvg, 
+                f1NonFluorAvg
+            )
                 
             self.trainingLog.writelines([str(e+1)+"," , str(avgTrainingLoss.item()) +",", str(avgValidationLoss.item())+","])
             
@@ -378,7 +460,8 @@ class Trainer():
                                    f"{avgNonFluorABSDiff},{avgTotalKernelMiscount},{avgTotalABSDiff},{avgTransmissionDiff}," + 
                                    f"{avgTransmissionABSDiff},{inAvgFluorKernelMiscount},{inAvgFluorABSDiff}," + 
                                    f"{inAvgNonFluorKernelMiscount},{inAvgNonFluorABSDiff},{inAvgTotalKernelMiscount}," + 
-                                   f"{inAvgTotalABSDiff},{inAvgTransmissionDiff},{inAvgTransmissionABSDiff},NA,NA\n")
+                                   f"{inAvgTotalABSDiff},{inAvgTransmissionDiff},{inAvgTransmissionABSDiff}," +
+                                   f"{f1FluorAvg},{f1NonFluorAvg}\n")
 
             
             torch.save(self.network.state_dict(), self.modelDir+"/EarVisionModel_"+str(e+1).zfill(3)+".pt")

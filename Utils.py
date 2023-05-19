@@ -10,8 +10,6 @@ import torch
 
 def calculateCountMetrics(predictedCounts, actualCounts, actualTotalInclAmbig = None):
     '''calculates count metrics for a single example'''
-
-
     predFluor = predictedCounts[0]
     predNonFluor = predictedCounts[1]
     predTotal = predFluor + predNonFluor
