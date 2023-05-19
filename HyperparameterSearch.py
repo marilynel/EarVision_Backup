@@ -2,6 +2,8 @@
 from Train import main as trainOneModel
 import datetime
 
+from sklearn.model_selection import GridSearchCV
+import os
 
 '''
 Hyperparams to consider searching for:
@@ -41,14 +43,24 @@ def hyperparameterSearch():
 
 
     searchStartTime = datetime.datetime.now()
-    searchDir = "HyperparamSearch_" + searchStartTime.strftime("%m.%d.%y_%I.%M%p" + "/")
+    searchDir = "HyperparamSearch\HyperparamSearch_" + searchStartTime.strftime("%m.%d.%y_%I.%M%p" + "/")
+    if not os.path.exists(searchDir):
+        os.makedirs(searchDir)
 
     trainable_backbone_layers_tuning = [0, 1, 2, 3, 4, 5]
     box_nms_thresh_tuning = [0.1, 0.3, 0.5, 0.7, 0.9]
     box_score_thresh_tuning = [0.1, 0.2, 0.4, 0.6, 0.8]
 
+    param_grid = {
+        "trainable_backbone_layers":trainable_backbone_layers_tuning,
+        "box_nms_thresh":box_nms_thresh_tuning,
+        "box_score_thresh":box_score_thresh_tuning
+    }
+
 
     # https://datagy.io/sklearn-gridsearchcv/
+    # https://discuss.pytorch.org/t/what-is-the-best-way-to-perform-hyper-parameter-search-in-pytorch/19943
+
 
 
     hyperparams = {
