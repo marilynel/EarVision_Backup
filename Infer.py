@@ -35,7 +35,7 @@ def Infer(dirPath = os.getcwd()):
         print("Running on CPU. Device: ", device)
 
     # Change if needed, options below in function declaration
-    modelDir, epochStr = pickModel("pref")
+    modelDir, epochStr = pickModel("may25")
     
 
     print("Loading Saved Model: ", modelDir,  "    Epoch: ", epochStr)
@@ -148,8 +148,6 @@ def Infer(dirPath = os.getcwd()):
                     markerCount = len(markerType.findall("Marker"))
                     markerTypeCounts[typeID-1] = markerCount
 
-            #print("Marker Type Counts:", markerTypeCounts, "Total: ", sum(markerTypeCounts))
-
             if sum(markerTypeCounts[0:1])==0:
                 xmlAvail = False
 
@@ -167,7 +165,6 @@ def Infer(dirPath = os.getcwd()):
 
         with torch.no_grad(): 
             prediction = model(imageTensor)[0]
-        #print(prediction)
 
         #keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
         finalPrediction = prediction
@@ -210,9 +207,6 @@ def Infer(dirPath = os.getcwd()):
             imgsForHandAnnotation = True
 
 
-        # TODO: add unedited image to handAnno folder 
-        # check parameters into unmarkedImg() as well as usage internal to function
-
         if imgsForHandAnnotation:
             numImagesHandAnno += 1
             #unmarkedImg(path, newAnnoDir+"/"+ fileName.split(".")[0] + "_original.png")
@@ -246,10 +240,6 @@ def Infer(dirPath = os.getcwd()):
         avgEarScoreFluor = round(np.mean(fluorScores), 3)
         avgEarScoreNonFluor = round(np.mean(nonFluorScores), 3)
         avgEarScoreAll = round(torch.mean(scores).item(), 3)
-        
-        # copy and pasted above for subfolder sorting -- will this work??
-        #earName = fileName.split(".")[0] 
-        #outFile.write(earName+",")
 
         
 
@@ -282,10 +272,12 @@ def Infer(dirPath = os.getcwd()):
                 listTransABSDiff.append(transmissionABSDiff)
                 listPredActTransRatios.append(predTransmission/actualTransmission)
 
+            # is it worth it to calc f1 here?
+
         outFile.write("\n")
         
 
-    outFile.write("Model," + modelDir + ",Epoch," + epochStr)
+    #outFile.write("Model," + modelDir + ",Epoch," + epochStr)
     outFile.close()
 
     with open(outputDirectory+ "/InferenceStats-" + modelDir + "-" + epochStr + ".csv", "w") as statsFile:
@@ -315,14 +307,18 @@ def pickModel(id):
         return "02.27.23_02.06PM", "023"
     elif id == "feb2706":
         return "02.27.23_06.02PM", "024"
+    #####################################
     elif id == "pref" or id == "march06":   # this is the model & epoch John is currently using for the Maize meeting
         return "03.06.23_12.55PM", "022"
+    #####################################
     elif id == "apr13":
         return "04.13.23_04.13PM", "014"
     elif id == "apr21":
         return "04.21.23_09.46AM", "029"
     elif id == "apr25":
         return "04.25.23_07.46AM", "014"
+    elif id == "may25":
+        return "05.25.23_02.26PM", "028"
 
 
 if __name__ == "__main__":

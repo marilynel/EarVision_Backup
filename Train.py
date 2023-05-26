@@ -53,6 +53,7 @@ def setHyperParams(hyperParameterInput):
         "max_size" : 1333,                      # max size of image to be rescaled before feeding it to the backbone
         "trainable_backbone_layers" : 3,        # number of trainable (not frozen) layers starting from final block, values between 0 - 5, with 6 ==  all backbone layers are trainable. default == 3
         "box_nms_thresh" : 0.3,                 # NMS threshold for the prediction head. Used during inference
+        #"box_nms_thresh" : 0.5,                 # NMS threshold for the prediction head. Used during inference
         "box_score_thresh" : 0.2                # during inference, only return proposals with a classification score greater than box_score_thresh
     }
 

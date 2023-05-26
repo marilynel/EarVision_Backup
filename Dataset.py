@@ -29,12 +29,15 @@ class ObjectDetectionDataset(Dataset):
         self.classes = [None, "nonfluorescent",  "fluorescent"]    
 
         for imgIndex, file in enumerate(sorted(os.listdir(self.imageDirectory))):  #looping through files in directories
-            if(file.endswith((".png", ".jpg", ".tif"))):
+            #ORIGINAL if(file.endswith((".png", ".jpg", ".tif"))):
+            if(file.endswith((".png", ".jpg", ".tif"))) and (file.startswith(("B"))):
                 try:
                     imagePath = os.path.join(self.imageDirectory, file)  
                     annotationPath = os.path.join(self.annotationDirectory, os.path.splitext(file)[0].split(".")[0]+".xml")
+
                     self.imagePaths.append(imagePath)
                     self.annotationPaths.append(annotationPath)
+
                 except Exception as e:
                     print(str(e))
                     pass
