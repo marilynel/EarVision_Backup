@@ -50,6 +50,7 @@ class ObjectDetectionDataset(Dataset):
                     self.imagePaths.append(imagePath)
                     self.annotationPaths.append(annotationPath)
 
+
                 except Exception as e:
                     print(str(e))
                     pass
