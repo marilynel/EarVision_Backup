@@ -1,87 +1,80 @@
-#runs a hyperparameter search
+'''
+EarVision 2.0:
+EarVision Hyperparameter Search
+
+This script performs a crude hyperparameter search on EarVision's Train module. The search is completed using the 
+grid-search tuning technique (examples here: https://datagy.io/sklearn-gridsearchcv/ and
+https://discuss.pytorch.org/t/what-is-the-best-way-to-perform-hyper-parameter-search-in-pytorch/19943).
+
+In order to use this script, go to the "Adjust hyperparams here" comment. The lists here will contain the 
+hyperparameter numerical values to be tested for trainable_backbone_layers, box_nms_thresh, and box_score_thresh. These
+can be changed as needed. If different hyperparameters need to be tested, go to the hyperparameters dictionary below 
+and change the value there for the list of values you would like to iterate through. "NOTE" will be in the comments 
+above places where the code can be easily customized to the current needs of the user.
+
+The models produced by this script will be in C:\CornEnthusiast\Projects\EarVision\SavedModels\HyperparamSearch
+
+Important note: the models produced are very large, and some may need to be manually deleted in order for there to be 
+enough room to run the search for all values. This search script will develop models for every possible combination of 
+the hyperparameters given. 
+
+Marilyn Leary 2023 
+https://github.com/marilynel
+'''
+
 from Train import main as trainOneModel
 import datetime
 
-from sklearn.model_selection import GridSearchCV
-import os
-
-'''
-Hyperparams to consider searching for:
-
--   trainable_backbone_layers
-    ints between 0 and 5 
--   box_nms_thresh
-    floats between 0 and 1
-    pref usually ~0.5
--   box_score_thresh
-    likely floats between 0 and 1
--   rpn_fg_iou_thresh
-    floats 0 to 1
--   validation percentage?
-
-Need:
--   starting hyperparam values
--   changing amount -> 0.1 for floats?
-                    -> up or down...start at one end and work toward other?
--   struct/file to store ending hyperparam values and helpful metrics
-    f1 once thats figured out 
-    map?
-    trans diffs     -> in/out diff          -> in is in training set, out is in validation set
-                    -> in/out abs diff
-
-
-
-'''
-
 
 def hyperparameterSearch():
+    # NOTE: Change subfolderName to specify details for your searcg
+    subfolderName = "HyperparamSearch_trainingSetAllImages" 
+
     print("-----------------------------------")
     print("COMMENCING HYPERPARAMETER SEARCH...")
     print("-----------------------------------")
 
-    #okay, so should have way to say which hyperparameters to search through. Probably also want a seed for the validation split?
-
-
     searchStartTime = datetime.datetime.now()
-    searchDir = "HyperparamSearch\HyperparamSearch_" + searchStartTime.strftime("%m.%d.%y_%I.%M%p" + "/")
-    if not os.path.exists(searchDir):
-        os.makedirs(searchDir)
+    searchDir = "HyperparamSearch/" + subfolderName + searchStartTime.strftime("%m.%d.%y_%I.%M%p" + "/")
 
-    trainable_backbone_layers_tuning = [0, 1, 2, 3, 4, 5]
-    box_nms_thresh_tuning = [0.1, 0.3, 0.5, 0.7, 0.9]
-    box_score_thresh_tuning = [0.1, 0.2, 0.4, 0.6, 0.8]
+    # NOTE: Adjust hyperparams here
+    trainable_backbone_layers_tuning = [0, 1, 2, 3, 4, 5]                                              
+    #box_nms_thresh_tuning = [0.1, 0.3, 0.5, 0.7, 0.9]
+    #box_score_thresh_tuning = [0.1, 0.2, 0.4, 0.6, 0.8]
+    #trainable_backbone_layers_tuning = []
+    box_nms_thresh_tuning = [0.5]
+    box_score_thresh_tuning = [0.2]          
 
-    param_grid = {
-        "trainable_backbone_layers":trainable_backbone_layers_tuning,
-        "box_nms_thresh":box_nms_thresh_tuning,
-        "box_score_thresh":box_score_thresh_tuning
-    }
+    # NOTE: "ok" is used to help move search along if it gets interrupted. To use, set ok = False, then change the if 
+    # statement in the loop below to restart the search where it left off. 
+    ok = True #False    
+    for i in range(len(trainable_backbone_layers_tuning)):
+        for j in range(len(box_nms_thresh_tuning)):
+            for k in range(len(box_score_thresh_tuning)):
+                # NOTE: The following "if" statement can be adjusted and uncommented if needed. See comment above.
+                # search along if it gets interrupted.
+                # if (i > 3 and j > 0 and k > 3):
+                #    ok = True
+                if ok:
+                    hyperparams = {
+                        "validationPercentage" : 0.2,           
+                        "batchSize" : 16,                       
+                        "learningRate" : 0.0005,                
+                        "epochs" : 30,                          
+                        "rpn_pre_nms_top_n_train" : 3000,       
+                        "rpn_post_nms_top_n_train" : 3000,      
+                        "rpn_pre_nms_top_n_test" : 3000,         
+                        "rpn_post_nms_top_n_test" : 3000,       
+                        "rpn_fg_iou_thresh" : 0.7,              
+                        "rpn_batch_size_per_image" : 512,       
+                        "min_size" : 800,                       
+                        "max_size" : 1333,                      
+                        "trainable_backbone_layers" : trainable_backbone_layers_tuning[i],
+                        "box_nms_thresh" : box_nms_thresh_tuning[j],                
+                        "box_score_thresh" : box_score_thresh_tuning[k]               
+                    }
 
-
-    # https://datagy.io/sklearn-gridsearchcv/
-    # https://discuss.pytorch.org/t/what-is-the-best-way-to-perform-hyper-parameter-search-in-pytorch/19943
-
-
-
-    hyperparams = {
-        "validationPercentage" : 0.2,           # n/a
-        "batchSize" : 16,                       # n/a
-        "learningRate" : 0.0005,                # n/a
-        "epochs" : 30,                          # n/a
-        "rpn_pre_nms_top_n_train" : 3000,       # n/a
-        "rpn_post_nms_top_n_train" : 3000,      # n/a
-        "rpn_pre_nms_top_n_test" : 3000,        # n/a 
-        "rpn_post_nms_top_n_test" : 3000,       # n/a
-        "rpn_fg_iou_thresh" : 0.7,              # minimum IoU between the anchor and the GT box so that they can be considered as positive during training of the RPN.
-        "rpn_batch_size_per_image" : 512,       # n/a
-        "min_size" : 800,                       # n/a
-        "max_size" : 1333,                      # n/a
-        "trainable_backbone_layers" : trainable_backbone_layers_tuning,        # number of trainable (not frozen) layers starting from final block, values between 0 - 5, with 6 ==  all backbone layers are trainable. default == 3
-        "box_nms_thresh" : box_nms_thresh_tuning,                 # NMS threshold for the prediction head. Used during inference
-        "box_score_thresh" : box_score_thresh_tuning                # n/a
-    }
-
-    trainOneModel(hyperparameterInput = hyperparams, searchResultDir = searchDir)
+                    trainOneModel(hyperparameterInput = hyperparams, searchResultDir = searchDir)
 
 if __name__ == "__main__":
     hyperparameterSearch()

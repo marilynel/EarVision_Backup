@@ -14,4 +14,4 @@ inferenceDirectoryPath = filedialog.askdirectory(initialdir=homeDirec+"/Inferenc
 print("Opening " + inferenceDirectoryPath)
 
 root.destroy()
-Infer(inferenceDirectoryPath)
+Infer("03.06.23_12.55PM", "022", inferenceDirectoryPath)

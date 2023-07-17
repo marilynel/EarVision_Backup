@@ -1,5 +1,17 @@
+'''
+EarVision 2.0:
+Infer
+
+This script loads a pre-trained model, sets a device to run the inference on (preferrably GPU), iterates over the given 
+image dataset, and performs an inference using that model. 
+
+Model may be changed in main() where function Infer is called.
+
+Predictions and metrics may be found in C:/Users/CornEnthusiast/Projects/EarVision/Inference/{dataset}
+'''
+
 import torch
-import torchvision
+#import torchvision
 import torchvision.transforms.functional as TF
 import torchvision.models.detection as objDet
 from torchvision.models.detection.faster_rcnn import FastRCNNPredictor
@@ -7,7 +19,7 @@ import xml.etree.ElementTree as ET
 import os
 from PIL import Image
 from tqdm import tqdm
-import cv2
+#import cv2
 import numpy as np
 import datetime
 from Train import outputAnnotatedImgCV, loadHyperparamFile
@@ -15,97 +27,82 @@ from Utils import *
 import datetime
 
 
-def Infer(dirPath = os.getcwd()):
+def Infer(modelDir, epochStr, dirPath = os.getcwd()):
+#def Infer(dirPath = os.getcwd()):
+
     time = datetime.datetime.now().strftime('%m.%d_%H.%M')
     numImagesHandAnno = 0
     
     print("Running EarVision 2.0 Inference")
-
     print("----------------------")
     print("FINDING GPU")
     print("----------------------")
     print("Currently running CUDA Version: ", torch.version.cuda)
 
-    #pointing to our GPU if available
-    if torch.cuda.is_available():
-        device = torch.device("cuda:0")
-        print("Running on GPU. Device: ", device)
-    else:
-        device = torch.device("cpu")
-        print("Running on CPU. Device: ", device)
+    device = findDevice()
 
-    # Change if needed, options below in function declaration
-    modelDir, epochStr = pickModel("may25")
+    print(f"Loading Saved Model: {modelDir}\tEpoch: {epochStr}")
+
+    hyperparameters = loadHyperparamFile(f"SavedModels/{modelDir}/Hyperparameters.txt")
+    try:
+        model = objDet.fasterrcnn_resnet50_fpn_v2(
+            weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, 
+            box_detections_per_img=700, 
+            rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"], 
+            rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"], 
+            rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   
+            rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
+            rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], 
+            trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
+            rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], 
+            box_nms_tresh = hyperparameters["box_nms_thresh"], 
+            box_score_thresh = hyperparameters["box_score_thresh"]
+        )
+    except:
+        model = objDet.fasterrcnn_resnet50_fpn_v2(
+            weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, 
+            box_detections_per_img=700, 
+            rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"], 
+            rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"], 
+            rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   
+            rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
+            rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], 
+            trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
+            rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"]
+        )
     
-
-    print("Loading Saved Model: ", modelDir,  "    Epoch: ", epochStr)
-
- 
-    hyperparameters = loadHyperparamFile("SavedModels/"+modelDir+"/Hyperparameters.txt")
-
-    '''
-    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
-    rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
-    rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
-    rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
-    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh=0.10, box_score_thresh = 0.30, rpn_score_thresh = 0.15)
-    '''
-   
+    # Potentially add to hyperparameters:
+    # rpn_score_thresh = 0.15
     
-    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
-    rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
-    rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
-    rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
-    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh = 0.3, box_score_thresh = 0.15)
-    
-    
-    '''
-    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
-    rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
-    rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
-    rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
-    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh=0.25)
-   '''
+    # Weird but unless you do this it defaults to 91 classes
+    in_features = model.roi_heads.box_predictor.cls_score.in_features
 
-
-    #weird but unless you do this it defaults to 91 classes
-    in_features =   model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 3) #give it number of classes, including background class
+    # Give the number of classes, including background class
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 3) 
     model.to(device)
 
+    # Load saved model and set to eval (because some layers are set to train upon creation)
+    model.load_state_dict(torch.load(f"SavedModels/{modelDir}/EarVisionModel_{epochStr}.pt"))
+    model.eval() 
 
-    model.load_state_dict(torch.load("SavedModels/"+modelDir+"/EarVisionModel_"+ epochStr  +".pt"))
-    model.eval() # set to eval because some layers are set to train upon creation
+    trainingSet = getTrainingSet(modelDir)
+    imagePaths = buildImagePathList(dirPath)
 
-   
-    #just for cases when you run happen to run inference on things that could have been in the training set. Would like to keep track of this
-    trainingSetFile = open("SavedModels/"+modelDir+"/TrainingSet.txt").readlines()
-    trainingSet = []
-    for l in trainingSetFile:
-        trainingSet.append(l.strip().replace('\\', '/').split('/')[-1].split('.')[0])
-
-    imageDirectory = dirPath
-    imagePaths = []
-
-    for imgIndex, file in enumerate(sorted(os.listdir(imageDirectory))):  #looping through files in directories
-        if(file.endswith((".png", ".jpg", ".tif"))):
-            try:
-                imagePath = os.path.join(imageDirectory, file)  
-                imagePaths.append(imagePath)
-
-            except Exception as e:
-                print(str(e))
-                pass
+    modelID = modelDir.split("/")[-1]    
+    inferenceIdentifier = f"InferenceOutput-{modelID[:8]}-{modelID[9:]}-{epochStr}-{time}" 
     
-    inferenceIdentifier = "InferenceOutput-" + modelDir[:8] + "-" + modelDir[9:] + "-" + epochStr + "-" + time
-    outputDirectory = imageDirectory + "/" + inferenceIdentifier
-
+    
+    # runinferencesonmultiplemodels edit
+    # outputDirectory = dirPath + "/" + inferenceIdentifier
+    outputDirectory = dirPath + "/" + inferenceIdentifier + "_test"
     os.makedirs(outputDirectory, exist_ok = True)
 
+    # needAnnotations directory is for images that have more than a specific threshold of predicted ambiguous kernels
+    # TODO: this may be changed later to include images with fewer than 200 kernels; TBD 6/27 mel
     newAnnoDir = outputDirectory + "/needAnnotations"
     os.makedirs(newAnnoDir, exist_ok=True)
 
-    outFile = open(outputDirectory + "/" + inferenceIdentifier + ".csv", "w")
+    outFile = open(f"{outputDirectory}/{inferenceIdentifier}.csv", "w")
     outFile.write(
         "EarName,TrainingSet,PredictedFluor,PredictedNonFluor,PredictedTotal,PredictedTransmission,AmbiguousKernels," +
         "AmbiguousKernelPercentage,AverageEarScoreFluor,AverageEarScoreNonFluor,AverageEarScoreAll,ActualFluor," + 
@@ -114,66 +111,31 @@ def Infer(dirPath = os.getcwd()):
         "TranmissionABSDiff,PredtoActTransmissionRatio\n"
     )
 
-    listTransABSDiff = []
-    listPredActTransRatios = []
-    listPredAmbigs = []
-    listTransDiff = []
+    # Inference metrics to be used in comparing inferences
+    listTransABSDiff, listPredActTransRatios, listPredAmbigs, listTransDiff = [], [] ,[] ,[]
 
     for path in tqdm(imagePaths):
-        #print("working on ", path)
-        image = Image.open(path).convert('RGB') #bringing sample in as RGB
-        #imgWidth, imgHeight = image.size
-        #image = image.resize((self.width, self.height))
+        # Bring sample in as RGB
+        image = Image.open(path).convert('RGB') 
         imageTensor = TF.to_tensor(image).to(device).unsqueeze(0)
-
-        markerTypeCounts = [0,0,0]
-
+        actualFluor, actualNonFluor, actualAmb, actualTransmission, actualTotal = 0, 0, 0, 0, 0
         xmlAvail = True
 
         try:
             xmlTree = ET.parse(path.split(".")[0] + ".xml")
-
         except:
             xmlAvail = False
 
+        if xmlAvail:
+            xmlAvail, actualFluor, actualNonFluor, actualAmb, actualTransmission, actualTotal = \
+                parseXMLData(xmlAvail, xmlTree)
 
-        if(xmlAvail):
-            xmlRoot = xmlTree.getroot()
-
-            markerData =  xmlRoot.find('Marker_Data')
-
-            for markerType in markerData.findall("Marker_Type"):
-                typeID = int(markerType.find('Type').text)
-                if(typeID in [1,2,3]):
-                    markerCount = len(markerType.findall("Marker"))
-                    markerTypeCounts[typeID-1] = markerCount
-
-            if sum(markerTypeCounts[0:1])==0:
-                xmlAvail = False
-
-        if(xmlAvail):
-            actualFluor = markerTypeCounts[0]
-            actualNonFluor = markerTypeCounts[1]
-            actualAmb = markerTypeCounts[2]
-
-            actualTransmission = actualFluor / (actualNonFluor+actualFluor) * 100
-
-            # should only include fluro and nonfluor, subtract ambiguous
-            #actualTotal = sum(markerTypeCounts)   #this would include the ambiguous kernels in the actual total
-            actualTotal = actualFluor + actualNonFluor
-    
 
         with torch.no_grad(): 
             prediction = model(imageTensor)[0]
 
         #keptBoxes = torchvision.ops.nms(prediction['boxes'], prediction['scores'], 0.2 )
         finalPrediction = prediction
-
-        '''
-        finalPrediction['boxes'] = finalPrediction['boxes'][keptBoxes]
-        finalPrediction['scores'] = finalPrediction['scores'][keptBoxes]
-        finalPrediction['labels'] = finalPrediction['labels'][keptBoxes]
-        '''
 
         fileName = path.replace("\\", "/").split("/")[-1]
 
@@ -197,19 +159,24 @@ def Infer(dirPath = os.getcwd()):
         inTrainingSet = False
         if earName in trainingSet:
             inTrainingSet = True
-
-        # inTrainingSet == False                if True?    no
-        # xmlAvail == False                     if true?    no
-        # ambiguousKernelCount >= 20            if true?    yes
         
+
+        predNonFluor -= ambiguousKernelCount
+        predFluor -= ambiguousKernelCount 
+        predTotal = predFluor + predNonFluor 
+
+
         imgsForHandAnnotation = False
+
         if not inTrainingSet and not xmlAvail and ambiguousKernelCount >= 20:
             imgsForHandAnnotation = True
+        elif not inTrainingSet and not xmlAvail and predTotal<= 100:
+            imgsForHandAnnotation = True
+
 
 
         if imgsForHandAnnotation:
             numImagesHandAnno += 1
-            #unmarkedImg(path, newAnnoDir+"/"+ fileName.split(".")[0] + "_original.png")
             outputAnnotatedImgCV(imageTensor[0], finalPrediction, newAnnoDir+"/"+ fileName.split(".")[0] + "_inference.png")
             outputPredictionAsXML(finalPrediction, newAnnoDir+"/" + fileName.split(".")[0]+"_inference.xml")
             convertPVOC(newAnnoDir+"/" + fileName.split(".")[0]+"_inference.xml", image.size)
@@ -221,9 +188,9 @@ def Infer(dirPath = os.getcwd()):
             ambiguousKernelPercentage  = "N/A"
 
 
-        predNonFluor -= ambiguousKernelCount
-        predFluor -= ambiguousKernelCount 
-        predTotal = predFluor + predNonFluor 
+        ##predNonFluor -= ambiguousKernelCount
+        #predFluor -= ambiguousKernelCount 
+        #predTotal = predFluor + predNonFluor 
 
         try:
             predTransmission =   predFluor /  (predTotal) * 100
@@ -241,85 +208,151 @@ def Infer(dirPath = os.getcwd()):
         avgEarScoreNonFluor = round(np.mean(nonFluorScores), 3)
         avgEarScoreAll = round(torch.mean(scores).item(), 3)
 
-        
-
         if(inTrainingSet):
             outFile.write("True,")
         else:
             outFile.write(",")
 
         #write the predictions to outFile
-        outFile.write(str(predFluor) + "," + str(predNonFluor) + "," + str(predTotal) + "," + str(predTransmission) + ",")  
-        outFile.write(str(ambiguousKernelCount)+"," + str(ambiguousKernelPercentage)+","+ str(avgEarScoreFluor)+","+str(avgEarScoreNonFluor)+","+str(avgEarScoreAll)+",")      
+        outFile.write(
+            f"{predFluor},{predNonFluor},{predTotal},{predTransmission},{ambiguousKernelCount}," + 
+            f"{ambiguousKernelPercentage},{avgEarScoreFluor},{avgEarScoreNonFluor},{avgEarScoreAll},"
+        )      
 
         if(xmlAvail):
-            #write to actual values to outFile
-            outFile.write(f"{actualFluor},{actualNonFluor},{actualAmb},{actualTotal},{actualTransmission},")
-
             fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, \
                 totalKernelABSDiff,  transmissionDiff, transmissionABSDiff = calculateCountMetrics([predFluor, \
                 predNonFluor], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
-            
-            #write the metric comparisons between prediced and actual to outFile            
-            outFile.write(
-                f"{fluorKernelDiff},{fluorKernelABSDiff},{nonFluorKernelDiff},{nonFluorKernelABSDiff}," + 
-                f"{totalKernelDiff},{totalKernelABSDiff},{transmissionDiff},{transmissionABSDiff}," + 
-                f"{predTransmission/actualTransmission}"
-            )
+            # Include XML data if it is available
+            outFile.write(makeStringXmlData(actualFluor, actualNonFluor, actualAmb, actualTotal, actualTransmission, predTransmission,fluorKernelDiff,fluorKernelABSDiff,nonFluorKernelDiff,nonFluorKernelABSDiff,totalKernelDiff,totalKernelABSDiff,transmissionDiff,transmissionABSDiff))
+            #outFile.write(f"{actualFluor},{actualNonFluor},{actualAmb},{actualTotal},{actualTransmission},")
 
-            listTransDiff.append(transmissionDiff)
+            #fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, \
+            #    totalKernelABSDiff,  transmissionDiff, transmissionABSDiff = calculateCountMetrics([predFluor, \
+            #    predNonFluor], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
+            
+            # Write the metric comparisons between prediced and actual to outFile            
+            #outFile.write(
+             #   f"{fluorKernelDiff},{fluorKernelABSDiff},{nonFluorKernelDiff},{nonFluorKernelABSDiff}," + 
+             #   f"{totalKernelDiff},{totalKernelABSDiff},{transmissionDiff},{transmissionABSDiff}," + 
+            #    f"{predTransmission/actualTransmission}"
+            #)
+
             if not inTrainingSet:
+                listTransDiff.append(transmissionDiff)
                 listTransABSDiff.append(transmissionABSDiff)
                 listPredActTransRatios.append(predTransmission/actualTransmission)
 
-            # is it worth it to calc f1 here?
-
         outFile.write("\n")
         
-
-    #outFile.write("Model," + modelDir + ",Epoch," + epochStr)
     outFile.close()
 
-    with open(outputDirectory+ "/InferenceStats-" + modelDir + "-" + epochStr + ".csv", "w") as statsFile:
+    createInfStatsFile(outputDirectory, modelID, epochStr, inferenceIdentifier, listTransABSDiff, \
+                       listPredActTransRatios, numImagesHandAnno, listPredAmbigs, listTransDiff)
+
+
+
+
+
+
+def makeStringXmlData(actualFluor, actualNonFluor, actualAmb, actualTotal, actualTransmission, predTransmission,fluorKernelDiff,fluorKernelABSDiff,nonFluorKernelDiff,nonFluorKernelABSDiff,totalKernelDiff,totalKernelABSDiff,transmissionDiff,transmissionABSDiff):
+    actualDataStr = f"{actualFluor},{actualNonFluor},{actualAmb},{actualTotal},{actualTransmission},"
+
+    #fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, \
+    #    totalKernelABSDiff,  transmissionDiff, transmissionABSDiff = calculateCountMetrics([predFluor, \
+    #    predNonFluor], [actualFluor, actualNonFluor], actualTotalInclAmbig = actualTotal)
+            
+            # Write the metric comparisons between prediced and actual to outFile            
+    actualDataStr += f"{fluorKernelDiff},{fluorKernelABSDiff},{nonFluorKernelDiff},{nonFluorKernelABSDiff}," + \
+        f"{totalKernelDiff},{totalKernelABSDiff},{transmissionDiff},{transmissionABSDiff}," + \
+        f"{predTransmission/actualTransmission}"
+
+    return actualDataStr
+  
+           
+
+
+def buildImagePathList(imageDirectory):
+    imagePaths = []
+    for imgIndex, file in enumerate(sorted(os.listdir(imageDirectory))): 
+        if(file.endswith((".png", ".jpg", ".tif"))):
+            try:
+                imagePath = os.path.join(imageDirectory, file)  
+                imagePaths.append(imagePath)
+
+            except Exception as e:
+                print(str(e))
+                pass
+    return imagePaths
+
+
+def parseXMLData(xmlAvail, xmlTree):
+    '''
+    Parse XML file for images with annotation data available. Return ground truth kernel counts and transmission data. 
+    '''
+    markerTypeCounts = [0,0,0]
+    actualFluor, actualNonFluor, actualAmb, actualTransmission, actualTotal = 0, 0, 0, 0, 0
+    xmlRoot = xmlTree.getroot()
+    markerData =  xmlRoot.find('Marker_Data')
+
+    for markerType in markerData.findall("Marker_Type"):
+        typeID = int(markerType.find('Type').text)
+        if(typeID in [1,2,3]):
+            markerCount = len(markerType.findall("Marker"))
+            markerTypeCounts[typeID-1] = markerCount
+
+    if sum(markerTypeCounts[0:1]) == 0:
+        xmlAvail = False
+    if xmlAvail:
+        actualFluor = markerTypeCounts[0]
+        actualNonFluor = markerTypeCounts[1]
+        actualAmb = markerTypeCounts[2]
+
+        actualTransmission = actualFluor / (actualNonFluor+actualFluor) * 100
+
+        # should only include fluro and nonfluor, subtract ambiguous
+        # actualTotal = sum(markerTypeCounts)   #this would include the ambiguous kernels in the actual total
+        actualTotal = actualFluor + actualNonFluor
+    #return xmlAvail, actualFluor, actualNonfluor, actualAmb, actualTransmission, actualTotal
+    return xmlAvail, actualFluor, actualNonFluor, actualAmb, actualTransmission, actualTotal
+
+
+def createInfStatsFile(outputDirectory, modelID, epochStr, inferenceIdentifier, listTransABSDiff, \
+                       listPredActTransRatios, numImagesHandAnno, listPredAmbigs, listTransDiff):
+    with open(f"{outputDirectory}/InferenceStats-{modelID}-{epochStr}.csv", "w") as statsFile:
         statsFile.write(
             "Inference,Model,Date,NotInTrainingSetAvgTransABSDiff,NotInTrainingSetAvgPredActTransRatio," +
-            "NumberImagesForHandAnnotation,AllImagesAvgPredAmbigs,AllAnnoImagesAvgTransDiff\n")
+            "NumberImagesForHandAnnotation,AllImagesAvgPredAmbigs,NotInTrainingSetAvgTransDiff\n")
+        time = datetime.datetime.now().strftime('%m.%d_%H.%M')
         statsFile.write(
-            # Inference Identifier
-            f"{inferenceIdentifier},{modelDir}_{epochStr},{time}," + 
+            # Inference Identifier  model ID              time
+            f"{inferenceIdentifier},{modelID}_{epochStr},{time}," + 
+            # average transmission absolute difference 
             f"{sum(listTransABSDiff)/len(listTransABSDiff)}," + 
             f"{sum(listPredActTransRatios)/len(listPredActTransRatios)},{numImagesHandAnno}," +
             f"{sum(listPredAmbigs)/len(listPredAmbigs)},{sum(listTransDiff)/len(listTransDiff)}\n"
         )
 
 
-def pickModel(id):
-    '''return modelDir, epochStr'''
-    if id == "oldAug":
-        return "08.18.22_07.13PM", "021"
-    elif id == "feb10":
-        return "02.10.23_07.04PM", "028"
-    elif id == "feb21":
-        return "02.21.23_03.39PM", "019"
-    elif id == "feb24":                     # new model with augmentations
-        return "02.24.23_03.23PM", "023"
-    elif id == "feb2702":
-        return "02.27.23_02.06PM", "023"
-    elif id == "feb2706":
-        return "02.27.23_06.02PM", "024"
-    #####################################
-    elif id == "pref" or id == "march06":   # this is the model & epoch John is currently using for the Maize meeting
-        return "03.06.23_12.55PM", "022"
-    #####################################
-    elif id == "apr13":
-        return "04.13.23_04.13PM", "014"
-    elif id == "apr21":
-        return "04.21.23_09.46AM", "029"
-    elif id == "apr25":
-        return "04.25.23_07.46AM", "014"
-    elif id == "may25":
-        return "05.25.23_02.26PM", "028"
+def findDevice():
+    # Pointing to our GPU if available
+    if torch.cuda.is_available():
+        device = torch.device("cuda:0")
+        print("Running on GPU. Device: ", device)
+    else:
+        device = torch.device("cpu")
+        print("Running on CPU. Device: ", device)
+    return device
+
+
+def getTrainingSet(modelDir):
+    # Read training set data; metrics are taken on images that were not in the training set.
+    trainingSetFile = open(f"SavedModels/{modelDir}/TrainingSet.txt").readlines()
+    trainingSet = []
+    for l in trainingSetFile:
+        trainingSet.append(l.strip().replace('\\', '/').split('/')[-1].split('.')[0])
+    return trainingSet
 
 
 if __name__ == "__main__":
-    Infer("Inference/XML_OutTest")
+    Infer("03.06.23_12.55PM", "022", "Inference/XML_OutTest")
