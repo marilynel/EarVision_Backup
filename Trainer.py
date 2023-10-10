@@ -9,7 +9,6 @@ import os
 from Utils import *
 
 from torchmetrics.detection.mean_ap import MeanAveragePrecision
-#from torchmetrics import F1Score
 from torchvision.ops import box_iou
 
 
@@ -21,26 +20,19 @@ class Trainer():
         self.device = device
         self.network = network
         self.hyperparameters = hyperparameters
-        ''' have seen this in some places:    
-         params = [p for p in network.parameters() if p.requires_grad], when passing params to optimizer. 
-         only calculates trainable parameters '''
-        #consider different optimizers here as well
+        # May consider different optimizers here as well
         self.optimizer = optim.Adam(network.parameters(), lr = self.hyperparameters["learningRate"])
-        '''note: i have not been using a Learning Rate Scheduler, since I
-        have been using Adam. but it might be work trying, either with Adam or
-        with a differnt optimizer (like SGD) ''' 
         #look into trying torch.optim.lr_scheduler.StepLR
         self.trainingLoader = trainDataLoader
         self.validationLoader = validationDataLoader
         self.modelDir = saveDirectory
 
-
-        self.trainingLog = open(self.modelDir + "/TrainingLog.csv", "w+")
+        self.trainingLog = open(f"{self.modelDir}/TrainingLog.csv", "w+")
         self.trainingLog.write("Epoch,InSampleLoss,OutSampleLoss,OutFluorKernelDiff,OutFluorABSDiff,OutNonFluorKernelDiff," + 
                                "OutNonFluorKernelABSDiff,OutTotalKernelDiff,OutTotalKernelABSDiff,OutTransmissionDiff," + 
                                "OutTransmissionABSDiff,InFluorKernelDiff,InFluorABSDiff,InNonFluorKernelDiff," + 
                                "InNonFluorKernelABSDiff,InTotalKernelDiff,InTotalKernelABSDiff,InTransmissionDiff," + 
-                               "InTransmissionABSDiff,f1Fluor,f1NonFluor\n")
+                               "InTransmissionABSDiff,f1Fluor,f1NonFluor,tMAPgeneral,tMAP50,tMAP75,vMAPgeneral,vMAP50,vMAP75\n")
 
 
     def forwardPass(self, images, annotations, train=False, trackMetrics = True):
@@ -54,17 +46,17 @@ class Trainer():
     
 
     def print_metrics(self, avgFluorKernelMiscount, avgFluorABSDiff, avgNonFluorKernelMiscount, avgNonFluorABSDiff, avgTotalKernelMiscount, avgTotalABSDiff, avgTransmissionDiff, avgTransmissionABSDiff,f1FluorAvg, f1NonFluorAvg):
-        print("-Avg Fluor Kernel Miscount: ", avgFluorKernelMiscount)
-        print("-Avg Fluor Kernel Miscount (Absolute Value): ", avgFluorABSDiff)
+        print(f"-Avg Fluor Kernel Miscount: {avgFluorKernelMiscount}")
+        print(f"-Avg Fluor Kernel Miscount (Absolute Value): {avgFluorABSDiff}")
 
-        print("-Avg NonFluor Kernel Miscount: ", avgNonFluorKernelMiscount)
-        print("-Avg NonFluor Kernal Miscount (Absolute Value):", avgNonFluorABSDiff)
+        print(f"-Avg NonFluor Kernel Miscount: {avgNonFluorKernelMiscount}")
+        print(f"-Avg NonFluor Kernal Miscount (Absolute Value):{avgNonFluorABSDiff}")
 
-        print("-Avg Total Kernel Miscount: ",  avgTotalKernelMiscount)
-        print("-Avg Total Kernal Miscount (Absolute Value):", avgTotalABSDiff)
+        print(f"-Avg Total Kernel Miscount: {avgTotalKernelMiscount}")
+        print(f"-Avg Total Kernal Miscount (Absolute Value): {avgTotalABSDiff}")
 
-        print("-Avg Transmission Diff: ", avgTransmissionDiff)
-        print("-Avg Transmission Diff (Absolute Value):", avgTransmissionABSDiff)
+        print(f"-Avg Transmission Diff: {avgTransmissionDiff}")
+        print(f"-Avg Transmission Diff (Absolute Value): {avgTransmissionABSDiff}")
 
         print(f"-Avg Fluor F1 Score: {f1FluorAvg}")
         print(f"-Avg NonFluor F1 Score: {f1NonFluorAvg}")
@@ -111,62 +103,36 @@ class Trainer():
             nfab = torch.stack(nonFluorActBoxes)
         
         fpb = torch.empty(0)
-        #fpb = torch.empty(1,4)#.fill_(0.)
         nfpb = torch.empty(0)
-        #nfpb = torch.empty(1,4)#.fill_(0.)
 
         if fluorPredBoxes:
             fpb = torch.stack(fluorPredBoxes)
         if nonFluorPredBoxes:
             nfpb = torch.stack(nonFluorPredBoxes)
         
-        #print(f"fpb: {fpb}")
-        #print(f"nfpb: {nfpb}")
-        
-
         return fpb, fab, nfpb, nfab
 
 
-    def compPredsVsAnnotation(self, ious, numActualBoxes):                    
-                        
+    def compPredsVsAnnotation(self, ious, numActualBoxes):                        
         truePos, falsePos, falseNeg = 0, 0, 0                
-
         boxIdx = [i for i in range(0, numActualBoxes)]
         foundBoxes = []
 
-        #print(f"before boxIdx = {boxIdx}")
-        #print(f"before foundBoxes = {foundBoxes}")
-
         if ious is not None:
-            #print(f"ious is not none")
             for i in range(0, len(ious)):
                 match = False
-                #print(f"iou[{i}] = {ious[i]}")
                 for j in range(0, len(ious[i])):
-                    #print(f"j = {j}")
                     if ious[i][j] >= 0.7:
                         # TODO: what if there are two boxes with >= 0.7 overlap??? is that possible???
-                        #print(f"at i = {i}, j = {j}, iou value {ious[i][j]} is greater than or equal to 0.7")
                         match = True
-                        #print(f"match is {match}")
                         foundBoxes.append(boxIdx[j])
-                        #print(f"foundBoxes contains: {foundBoxes}")
                         truePos += 1
-                        #print(f"truePos = {truePos}")
-                        # break
                 if not match:
                     falsePos += 1
-                    #print(f"only print me if match is false (did not find a matching box) for {i}")
-                    #print(f"falsePos = {falsePos}")
-        #print(f"\n after boxIdx = {boxIdx}")
-        #print(f"after foundBoxes = {foundBoxes}")
+
         for box in boxIdx:
-            #print(f"for {box} in boxIdx:")
             if box not in foundBoxes:
-                #print(f"\t{box} is not in foundBoxes")
-                #print(f"ground truth box {box} is a false negative")
                 falseNeg += 1
-                #print(f"\tfalseNeg = {falseNeg}")
 
         boxIdx.clear()
         foundBoxes.clear()
@@ -175,21 +141,18 @@ class Trainer():
         
 
     def train(self):
-
-        torch.set_grad_enabled(True) #enable the gradient
+        # Enable the gradient
+        torch.set_grad_enabled(True)
         epochs = self.hyperparameters["epochs"]
-        # NOTE: above line is correct
-        #epochs = 10
 
-        # NOTE: if we go back to using MAP, just do vMAP
-        # MAP calculation is very time intensive, althought so is F1
-        #validationMAP = MeanAveragePrecision(class_metrics = True)
-        #validationMAP = MeanAveragePrecision(iou_thresholds=[0.5,0.75],class_metrics=False)
+        trainingMAP = MeanAveragePrecision()
+        validationMAP = MeanAveragePrecision()
+        #trainingMAP = MeanAveragePrecision(iou_thresholds=[0.5,0.75])
+        #validationMAP = MeanAveragePrecision(iou_thresholds=[0.5,0.75])
 
         for e in range(epochs):
-
             print("------------------")
-            print("COMMENCING EPOCH: ", str(e+1)+"/"+str(epochs) )
+            print(f"COMMENCING EPOCH: {e+1} / {epochs}")
             print("------------------")
 
             trainingLossTotal = 0
@@ -208,39 +171,33 @@ class Trainer():
             for batch in tqdm(self.trainingLoader):
                 self.network.train()
                 images, annotations = batch
-                #weirdly, the F-RCNN model requires inputs in form of list
-                #so we gotta turn the batch tensors into lists, and also send each separate item to GPU
+                # Weirdly, the F-RCNN model requires inputs in form of list
+                # So we gotta turn the batch tensors into lists, and also send each separate item to GPU
                 images = list(image.to(self.device) for image in images)
-                
                 annotations = [{k: v.to(self.device) for k, v in t.items()} for t in annotations]
 
                 # consider :  with torch.cuda.amp.autocast(enabled=scaler is not None):?
                 lossDict = self.forwardPass(images, annotations, train=True)
-                
-                #loss reduction  -- mean vs. sum????
+                # Loss reduction  -- mean vs. sum????
                 lossSum = sum(loss for loss in lossDict.values())
-
                 lossMean = lossSum/self.trainingLoader.batch_size
-                
                 trainingLossTotal += lossSum
-                #trainingLossTotal += lossMean
-
+                # trainingLossTotal += lossMean
                 lossSum.backward()
-                #lossMean.backward()
-              
+                # lossMean.backward()
                 self.optimizer.step()
-
                 self.network.eval()
                 
                 with torch.no_grad():
-                    #the reason we run this through a second time just to get the outputs is due to a PyTorch F-CNN implementation quirk -- needs to be in eval() mode to get actual outputs.
-                    
+                    # The reason we run this through a second time just to get the outputs is due to a PyTorch F-CNN 
+                    # implementation quirk -- needs to be in eval() mode to get actual outputs.
                     finalPredictions = self.network(images) 
+
+                    trainingMAP.update(finalPredictions, annotations)
+
                     for i, p in enumerate(finalPredictions):
-                        '''
-                        Count total predicted fluor, predicted nonfluor, actual fluor, and actual nonfluor for an image.
-                        Calculate metrics. 
-                        '''
+                        # Count total predicted fluor, predicted nonfluor, actual fluor, and actual nonfluor for an image.
+                        # Calculate metrics. 
                         predictedFluorCnt = p['labels'].tolist().count(2)
                         predictedNonFluorCnt = p['labels'].tolist().count(1)
                         actualFluorCnt = annotations[i]['labels'].tolist().count(2)
@@ -249,7 +206,6 @@ class Trainer():
                         fluorKernelDiff, fluorKernelABSDiff, nonFluorKernelDiff, nonFluorKernelABSDiff, totalKernelDiff, \
                             totalKernelABSDiff, transmissionDiff, transmissionABSDiff = calculateCountMetrics([
                             predictedFluorCnt, predictedNonFluorCnt], [actualFluorCnt, actualNonFluorCnt])
-
 
                         inTotalFluorKernelDiff += fluorKernelDiff
                         inTotalFluorKernelABSDiff += fluorKernelABSDiff 
@@ -263,10 +219,7 @@ class Trainer():
                         inTotalTransmissionDiff += transmissionDiff
                         inTotalTransmissionABSDiff += transmissionABSDiff
 
-
-            '''
-            Find average insample (training set) metrics across all images in training set
-            '''
+            # Find average insample (training set) metrics across all images in training set
             inAvgFluorKernelMiscount = inTotalFluorKernelDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
             inAvgFluorABSDiff = inTotalFluorKernelABSDiff / (len(self.trainingLoader) * self.trainingLoader.batch_size)
 
@@ -281,8 +234,11 @@ class Trainer():
 
             avgTrainingLoss = (trainingLossTotal / len(self.trainingLoader))
 
-            
+            print("computing tMAP....")
+            tMAP = trainingMAP.compute()
+            trainingMAP.reset()
             print("Training loss:", avgTrainingLoss )
+            print("Traning mAP: ", tMAP)
             print("Training Errors: ")
 
             self.print_metrics(
@@ -291,14 +247,12 @@ class Trainer():
             )
 
             print("VALIDATING")
-            #because of quirky reasons, the network needs to be in .train() mode to get the validation loss... silly
-            #but it should be kosher since there are no dropout layers and the BatchNorms are frozen
+            # For quirky reasons, the network needs to be in .train() mode to get the validation loss... silly
+            # But it should be kosher since there are no dropout layers and the BatchNorms are frozen
             
             f1FluorValues, f1NonFluorValues = [], []
 
-            #self.network.eval()
-            with torch.no_grad():
-                
+            with torch.no_grad():    
                 totalFluorKernelDiff = 0
                 totalNonFluorKernelDiff = 0
                 totalTotalKernelDiff = 0
@@ -315,54 +269,43 @@ class Trainer():
                     images = list(image.to(self.device) for image in images)
                     annotations = [{k: v.to(self.device) for k, v in t.items()} for t in annotations]
 
-                    self.network.train() #just b/c of a technicality
+                    self.network.train() # Just b/c of a technicality
                     lossDict = self.forwardPass(images, annotations, train = False)
-                    #print(lossDict)
-                    #print("just evaled validaiton loss")
-
-                    #loss reduction = =mean vs. sum?
                     lossSum = sum(loss for loss in lossDict.values())
                     lossMean = lossSum/self.trainingLoader.batch_size
 
                     validationLossTotal += lossSum
-                    #validationLossTotal += lossMean
+                    # validationLossTotal += lossMean
              
-                    #print("validaiton loss sum:", lossSum)
-
-                    #now have to switch to eval to get actual predictions instead of losses. And the same batch has to run through model twice if you want both loss and accuracy metrics -__- 
-                    #seems like a big problem with the model source code. Not sure why they wrote it that way.
+                    # Now have to switch to eval to get actual predictions instead of losses. And the same batch has to 
+                    # run through model twice if you want both loss and accuracy metrics -__- 
+                    # Seems like a big problem with the model source code. Not sure why they wrote it that way.
                     self.network.eval()
                     predictions = self.network(images)
 
-                    #### START HERE F1 ####
+                    # F1 Calculations begin here
                     finalPredictions = predictions
 
                     # labels = [None, "nonfluorescent",  "fluorescent"]
-                    #            0           1                 2  
                     for k in range(1, len(finalPredictions)):           
-                        '''
-                        "k" is an image in validation set. Iterate through predictions in validation set images and 
-                        calculate F1 scores for each image; append to list.
-                        '''                        
+                        # "k" is an image in validation set. Iterate through predictions in validation set images and 
+                        # calculate F1 scores for each image; append to list.
 
-                        # Make sure that something exists in annotations and predictions for that image
-                        # TODO: how should those situations be handled???
                         if finalPredictions[k]["boxes"].size(dim = 0) != 0 and annotations[k]["boxes"].size()[0] != 0:
-                        
-                            fluorPredBoxes, fluorActBoxes, nonFluorPredBoxes, nonFluorActBoxes = self.splitBoxesByLabel(finalPredictions[k], annotations[k])
-
+                            fluorPredBoxes, fluorActBoxes, nonFluorPredBoxes, nonFluorActBoxes = \
+                                self.splitBoxesByLabel(finalPredictions[k], annotations[k])
                             iousFluor, iousNonFluor = None, None
                             
                             '''
                             TODO: 
-                            currently not accountoing for situations where:
+                            This calculation is currently not accounting for situations where:
                                 ->  there are no predictions
                                 ->  there are no actual boxes
                             figure out how to handle them!! (currenlty appended to dataset as 0s)
-
                             '''
 
-                            # These conditionals are necessary as an image may only have fluor or nonfluor data; above conditional will not catch
+                            # These conditionals are necessary as an image may only have fluor or nonfluor data; above 
+                            # conditional will not catch this
                             if fluorPredBoxes.size()[0] != 0 and fluorActBoxes.size()[0] != 0:
                                 iousFluor = box_iou(fluorPredBoxes, fluorActBoxes)
 
@@ -381,12 +324,7 @@ class Trainer():
                             f1FluorValues.append(0)
                             f1NonFluorValues.append(0)
 
-                    #### END NEW ####
-
-
-                    #validationMAP.update(finalPredictions, annotations)
-
-
+                    validationMAP.update(finalPredictions, annotations)
 
                     for i, p in enumerate(finalPredictions):
                         
@@ -428,21 +366,25 @@ class Trainer():
 
             avgValidationLoss = validationLossTotal /  (len(self.validationLoader) )  
 
-            # do we need a validationMAP.update()?
-            #valMAP = validationMAP.compute()
-            #validationMAP.reset()
-            #print("Validation mAP: " , valMAP)
-
+            valMAP = validationMAP.compute()
+            validationMAP.reset()
+            print("Validation mAP: " , valMAP)
 
             '''
-            TODO: MARILYN:
-            -   if an F1 score is whacky (no preds, no acts) it is currently going in as a 0 --> should it???
+            TODO: 
             -   decide how to evaluate and note down 0/0 (nan) situations
             '''
+            f1FluorAvg, f1NonFluorAvg = 0, 0
+            try:
+                f1FluorAvg = sum(f1FluorValues) / len(f1FluorValues)
+            except:
+                f1FluorAvg = 0 
 
-            f1FluorAvg = sum(f1FluorValues) / len(f1FluorValues)
-            f1NonFluorAvg = sum(f1NonFluorValues) / len(f1NonFluorValues)
-            
+            try:
+                f1NonFluorAvg = sum(f1NonFluorValues) / len(f1NonFluorValues)
+            except:
+                f1NonFluorAvg = 0
+
 
             print("Validation Loss: " , avgValidationLoss)
             print("Validation Errors: ")
@@ -453,21 +395,19 @@ class Trainer():
                 f1NonFluorAvg
             )
                 
-            self.trainingLog.writelines([str(e+1)+"," , str(avgTrainingLoss.item()) +",", str(avgValidationLoss.item())+","])
-            
-
+            self.trainingLog.writelines([f"{e+1},", f"{avgTrainingLoss.item()},", f"{avgValidationLoss.item()},"])
             self.trainingLog.write(f"{avgFluorKernelMiscount},{avgFluorABSDiff},{avgNonFluorKernelMiscount}," + 
                                    f"{avgNonFluorABSDiff},{avgTotalKernelMiscount},{avgTotalABSDiff},{avgTransmissionDiff}," + 
                                    f"{avgTransmissionABSDiff},{inAvgFluorKernelMiscount},{inAvgFluorABSDiff}," + 
                                    f"{inAvgNonFluorKernelMiscount},{inAvgNonFluorABSDiff},{inAvgTotalKernelMiscount}," + 
                                    f"{inAvgTotalABSDiff},{inAvgTransmissionDiff},{inAvgTransmissionABSDiff}," +
-                                   f"{f1FluorAvg},{f1NonFluorAvg}\n")
+                                   f"{f1FluorAvg},{f1NonFluorAvg},{tMAP['map']},{tMAP['map_50']},{tMAP['map_75']}," +
+                                   f"{valMAP['map']},{valMAP['map_50']},{valMAP['map_75']}\n")
 
-            
-            torch.save(self.network.state_dict(), self.modelDir+"/EarVisionModel_"+str(e+1).zfill(3)+".pt")
-            print("Saved " + "EarVisionModel_"+str(e+1).zfill(3)+".pt")
+            torch.save(self.network.state_dict(), f"{self.modelDir}/EarVisionModel_{str(e+1).zfill(3)}.pt")
+            print(f"Saved EarVisionModel_{str(e+1).zfill(3)}.pt")
 
-            print("\n~EPOCH "+ str(e+1) + " TRAINING COMPLETE~ \n")
+            print(f"\n~EPOCH {e+1} TRAINING COMPLETE~ \n")
 
         self.trainingLog.close()
 

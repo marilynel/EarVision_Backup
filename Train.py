@@ -1,3 +1,4 @@
+import sys
 import torch
 from torch.utils.data import DataLoader
 import torchmetrics
@@ -23,7 +24,7 @@ from Utils import *
 
 
 def setHyperParams(hyperParameterInput):
-    hyperparameters = {}    #hyperparameterInput
+    hyperparameters = hyperParameterInput
 
     #Reasonable default hyperparameter values are all coded here for safe keeping. This way training should still proceed even if the parameter config .txt file is missing.
     '''
@@ -37,6 +38,7 @@ def setHyperParams(hyperParameterInput):
         RPN         Region Proposal Network
 
     '''
+
     defaultHyperparams = {
         "validationPercentage" : 0.2,           # 20% of training data is set aside in each epoch to be used for validation 
         "batchSize" : 16,                       # 16 images are sent to the GPU at a time
@@ -53,7 +55,6 @@ def setHyperParams(hyperParameterInput):
         "max_size" : 1333,                      # max size of image to be rescaled before feeding it to the backbone
         "trainable_backbone_layers" : 3,        # number of trainable (not frozen) layers starting from final block, values between 0 - 5, with 6 ==  all backbone layers are trainable. default == 3
         "box_nms_thresh" : 0.3,                 # NMS threshold for the prediction head. Used during inference
-        #"box_nms_thresh" : 0.5,                 # NMS threshold for the prediction head. Used during inference
         "box_score_thresh" : 0.2                # during inference, only return proposals with a classification score greater than box_score_thresh
     }
 
@@ -180,83 +181,64 @@ def outputHyperparameterFile(hyperparams, dir):
 
 
 def main(hyperparameterInput = {}, searchResultDir = ""):
-
     hyperparameters = setHyperParams(hyperparameterInput)
-
-
-
-
+    
     print("EarVision 2.0 \n")
-
-    # NOTE: "EarDataset" is the working directory
+    
     datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset")
-    #datasetFull = ObjectDetectionDataset(rootDirectory = "EarDataset_Subsample")
 
-
-    # modularize setting the trainSet, validationSet?
     trainSet, validationSet = setTrainingAndValidationSets(datasetFull, hyperparameters)
 
-
-
-
-    #wonder how useful changing the num_workers would be in this instance.
+    # How useful would changing the num_workers be in this instance?
     trainingDataLoader = DataLoader(trainSet, batch_size = hyperparameters["batchSize"], shuffle=True, collate_fn = myCollate)
 
-    #setting shuffle to False so it sees the exact same batches during each validation
+    # Setting shuffle to False so it sees the exact same batches during each validation
     # TODO: would shuffle=True help with cross validation?
     validationDataLoader = DataLoader(validationSet, batch_size = hyperparameters["batchSize"], shuffle=False, collate_fn = myCollate) 
-    
-        
-    #Some code to output examples from validation set.
-    os.makedirs("OutputImages", exist_ok=True)
-    '''
-    for i in range(2):
-        validateImgEx, validateAnnotationsEx = validationSet.__getitem__(i)
-        outputAnnotatedImgCV(validateImgEx, validateAnnotationsEx, "datasetValidationExample_"+str(i).zfill(3) + ".png")
-    '''
+
     device = findGPU()
 
-    #try changing?  trainable_backbone_layers=3, box_score_thresh = 0.03, box_nms_thresh=0.4, 
-    model = objDet.fasterrcnn_resnet50_fpn_v2(weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, box_detections_per_img=700, 
-    rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
-    rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
-    rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
-    rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], box_nms_thresh = hyperparameters["box_nms_thresh"], box_score_thresh = hyperparameters["box_score_thresh"])
+    model = objDet.fasterrcnn_resnet50_fpn_v2(
+        weights = objDet.FasterRCNN_ResNet50_FPN_V2_Weights.DEFAULT, 
+        box_detections_per_img = 700, 
+        rpn_pre_nms_top_n_train = hyperparameters["rpn_pre_nms_top_n_train"],   
+        rpn_post_nms_top_n_train = hyperparameters["rpn_post_nms_top_n_train"],  
+        rpn_pre_nms_top_n_test = hyperparameters["rpn_pre_nms_top_n_test"],   
+        rpn_post_nms_top_n_test = hyperparameters["rpn_post_nms_top_n_test"], 
+        rpn_fg_iou_thresh = hyperparameters["rpn_fg_iou_thresh"], 
+        trainable_backbone_layers = hyperparameters["trainable_backbone_layers"],  
+        rpn_batch_size_per_image = hyperparameters["rpn_batch_size_per_image"], 
+        box_nms_thresh = hyperparameters["box_nms_thresh"], 
+        box_score_thresh = hyperparameters["box_score_thresh"]
+    )
     
-    #awkward but unless you do this it defaults to 91 classes
+    # Awkward but unless you do this it defaults to 91 classes
     in_features = model.roi_heads.box_predictor.cls_score.in_features
-    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 3) #give it number of classes. includes background class as one of the counted classes
-
-
+    # Number of classes is 3, including background class
+    model.roi_heads.box_predictor = FastRCNNPredictor(in_features, 3) 
     model.to(device)
 
-
-    #making a time-stamped folder for the training run.
     startDateTime = datetime.datetime.now()
-    modelDir = "SavedModels/" + searchResultDir + startDateTime.strftime("%m.%d.%y_%I.%M%p")
+    modelDir = f"SavedModels/{searchResultDir}{startDateTime.strftime('%m.%d.%y_%I.%M%p')}"
     os.makedirs(modelDir, exist_ok = True)
 
-
     outputHyperparameterFile(hyperparameters, modelDir)
-    outputDataSetList(trainSet, modelDir+"/TrainingSet.txt")
-    outputDataSetList(validationSet, modelDir+"/ValidationSet.txt")
+    outputDataSetList(trainSet, f"{modelDir}/TrainingSet.txt")
+    outputDataSetList(validationSet, f"{modelDir}/ValidationSet.txt")
 
     trainer = Trainer(model, trainingDataLoader, validationDataLoader, device, hyperparameters, saveDirectory = modelDir)
     startTime = time.time()
     trainer.train()
     endTime = time.time()
 
-
     print("----------------------")
     print("ALL TRAINING COMPLETE")
     print("----------------------")
-    print("\nTraining Time:", round((endTime-startTime)/60, 4), "minutes")
+    print(f"\nTraining Time: {round((endTime-startTime)/60, 4)} minutes")
 
     model.eval()
 
     createExampleImages(validationSet, model, device, modelDir)
-
-
 
 
 if __name__ == "__main__":

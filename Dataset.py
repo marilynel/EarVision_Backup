@@ -1,3 +1,13 @@
+'''
+EarVision 2.0:
+Custom Class ObjectDetectionDataset
+
+Designed to work with object detection task for EarVision. This class loads image and annotation data from a root 
+directory, randomly augments the image for training, and returns a transformed image tensor and annotation information. 
+XML annotations are parsed to extract bounding box information. 
+'''
+
+
 import os
 import torch
 from torch.utils.data import Dataset
@@ -5,12 +15,10 @@ import torchvision.transforms.functional as TF
 from PIL import Image
 import numpy as np
 import xml.etree.ElementTree as ET
-
 import albumentations as A
 
 
 class ObjectDetectionDataset(Dataset):
-
     def __init__(self, rootDirectory):
         print("\n----------------------")
         print("DATASET INITIALIZATION")
@@ -18,6 +26,7 @@ class ObjectDetectionDataset(Dataset):
         self.rootDirectory = rootDirectory  
         self.imageDirectory = self.rootDirectory + "/All/Images"
         self.annotationDirectory = self.rootDirectory + "/All/Annotations"
+
         print("----------------------")        
         print("Dataset Root Directory: ", self.rootDirectory)
         print("Image Directory: ", self.imageDirectory)
@@ -28,20 +37,19 @@ class ObjectDetectionDataset(Dataset):
 
         self.classes = [None, "nonfluorescent",  "fluorescent"]    
 
-        for imgIndex, file in enumerate(sorted(os.listdir(self.imageDirectory))):
-            #looping through files in directories
-            #ORIGINAL if(file.endswith((".png", ".jpg", ".tif"))):
-            if(file.endswith((".png", ".jpg", ".tif"))) and (file.startswith(("B"))):
+        for imgIndex, file in enumerate(sorted(os.listdir(self.imageDirectory))): 
+            # Models are built with all images in the image directory. In order to limit the images by year, uncomment
+            # the second part of the conditional statement below. "B" indicates 2022 ears.
+            if(file.endswith((".png", ".jpg", ".tif"))):        # and (file.startswith(("B"))):
                 try:
-                    # female
-                    mother = file.split("x")[0]
-                    if mother.find("-") != -1:
-                        imagePath = os.path.join(self.imageDirectory, file)
-                        annotationPath = os.path.join(self.annotationDirectory, os.path.splitext(file)[0].split(".")[0]+".xml")
-                        self.imagePaths.append(imagePath)
-                        self.annotationPaths.append(annotationPath)
-                    else:
-                        continue
+                    imagePath = os.path.join(self.imageDirectory, file)  
+                    annotationPath = os.path.join(
+                        self.annotationDirectory, os.path.splitext(file)[0].split(".")[0]+".xml"
+                    )
+
+                    self.imagePaths.append(imagePath)
+                    self.annotationPaths.append(annotationPath)
+
 
                 except Exception as e:
                     print(str(e))
@@ -49,28 +57,27 @@ class ObjectDetectionDataset(Dataset):
 
         self.isTrainingSet = False
 
+
     def __len__(self):
         return len(self.imagePaths)
 
 
     def __getitem__(self, index):
-        #print("Getting item: ", self.samplePaths[index],self.maskPaths[index])
-        #consider changing something here to suppres PIL warning re: RGBA
-        image = Image.open(self.imagePaths[index]).convert('RGB') #bringing sample in as RGB
-        #imgWidth, imgHeight = image.size
-
+        '''
+        Load an image and corresponding annotations, perform data augmentation transformations, and return transformed
+        image tensor and bounding box data.
+        '''
+        # Consider changing something here to suppres PIL warning re: RGBA
+        image = Image.open(self.imagePaths[index]).convert('RGB') 
         imageTensor = TF.to_tensor(image)
 
-
-        #print(self.imagePaths[index])
         labels = []
         boxes = []
 
+        # Very helpful notebook for fruit dataset:
+        # https://www.kaggle.com/code/yerramvarun/fine-tuning-faster-rcnn-using-pytorch/notebook
 
-        #very helpful notebook for fruit dataset:
-        #https://www.kaggle.com/code/yerramvarun/fine-tuning-faster-rcnn-using-pytorch/notebook
-
-        #parsing XML annotations
+        # Retrieve XML files associated with dataset
         xmlTree = ET.parse(self.annotationPaths[index])
         xmlRoot = xmlTree.getroot()
 
@@ -81,20 +88,15 @@ class ObjectDetectionDataset(Dataset):
             print(len(xmlRoot.findall('object')))
         '''
      
-       
         for obj in xmlRoot.findall('object'):
-
             xmin = int(float(obj.find('bndbox').find('xmin').text))
             xmax = int(float(obj.find('bndbox').find('xmax').text))
-
             ymin = int(float(obj.find('bndbox').find('ymin').text))
             ymax = int(float(obj.find('bndbox').find('ymax').text))
             
-
-
-            #exclude spurious boxes with 0 area
+            # Exclude spurious boxes with 0 area
             if(not (xmin==xmax or ymin==ymax)):
-                #if box is labeled ambiguous, add fluorescent and nonfluorescent box
+                # If box is labeled ambiguous, add fluorescent and nonfluorescent box
                 if(obj.find('name').text=='ambiguous'):
                     labels.append(1)
                     boxes.append([xmin, ymin, xmax, ymax])     
@@ -104,28 +106,12 @@ class ObjectDetectionDataset(Dataset):
                     labels.append(self.classes.index(obj.find('name').text))
                     boxes.append([xmin, ymin, xmax, ymax])
 
-
-                    '''
-                    labels = ["nonfluorescent", "nonfluorescent", "fluorescent", ... ]
-                    boxes = [
-                        [xmin0, ymin0, xmax0, ymax0],
-                        [xmin1, ymin1, xmax1, ymax1],
-                        [xmin2, ymin2, xmax2, ymax2],
-                        ...
-                    ]
-                    '''
-
-
+        # Training set images may be augmented to help improve model training. "p" indicates the likelihood of an
+        # augmentation occurring.
         if(self.isTrainingSet):
             transform = A.Compose([
-                # Flip may be vertical, horizontal, or both
-                A.Flip(p=0.5),
-                A.MedianBlur (
-                    blur_limit=(5,9),
-                    always_apply=False,
-                    p=0.2
-                ),
-                # augment color jitter more? change contrast/sat/hue?
+                A.Flip(p=0.5),              # Flip may be vertical, horizontal, or both
+                A.MedianBlur (blur_limit=(5,9), always_apply=False, p=0.2),
                 A.ColorJitter (brightness=0.2, contrast=0, saturation=0, hue=0, always_apply=False, p=0.2),
                 A.Perspective (
                     scale=(0.05, 0.1),
@@ -140,7 +126,6 @@ class ObjectDetectionDataset(Dataset):
             ], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['myLabels']))
 
         else:
-            # if not training set, we don't transform?
             transform = A.Compose([A.Blur(p=0.0)], bbox_params=A.BboxParams(format='pascal_voc', label_fields=['myLabels']))
             
         numpyIm = np.asarray(image)
@@ -150,7 +135,6 @@ class ObjectDetectionDataset(Dataset):
         transformedBBoxes = transformed['bboxes']
         transformedLabels = transformed['myLabels']
         
-
         #Faster-RCNN expects targets as dictionary
         annotations = {}
         annotations["labels"] = torch.as_tensor(transformedLabels, dtype = torch.int64)
@@ -158,5 +142,5 @@ class ObjectDetectionDataset(Dataset):
 
         imageTensor = TF.to_tensor(transformedImage)
 
-
         return imageTensor, annotations
+    
